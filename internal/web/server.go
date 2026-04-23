@@ -1,8 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io/fs"
 	"log"
@@ -87,6 +89,18 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/forecasting", s.wrap(func(ctx context.Context) dashboard.ViewModel {
 		return s.service.Forecast(ctx)
 	}))
+	mux.HandleFunc("/api/view/hub", s.apiWrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Hub(ctx)
+	}))
+	mux.HandleFunc("/api/view/security", s.apiWrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Security(ctx)
+	}))
+	mux.HandleFunc("/api/view/anomalies", s.apiWrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Anomalies(ctx)
+	}))
+	mux.HandleFunc("/api/view/forecasting", s.apiWrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Forecast(ctx)
+	}))
 
 	return mux
 }
@@ -107,6 +121,49 @@ func (s *Server) wrap(load func(context.Context) dashboard.ViewModel) http.Handl
 			http.Error(w, "template render failed", http.StatusInternalServerError)
 		}
 	}
+}
+
+func (s *Server) apiWrap(load func(context.Context) dashboard.ViewModel) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), s.cfg.PrometheusTimeout)
+		defer cancel()
+
+		model := load(ctx)
+		headerHTML, err := s.renderPartial("topbar_meta", model)
+		if err != nil {
+			log.Printf("header partial render failed: %v", err)
+			http.Error(w, "header render failed", http.StatusInternalServerError)
+			return
+		}
+
+		bodyHTML, err := s.renderPartial("content", model)
+		if err != nil {
+			log.Printf("content partial render failed: %v", err)
+			http.Error(w, "content render failed", http.StatusInternalServerError)
+			return
+		}
+
+		payload := struct {
+			HeaderHTML string `json:"header_html"`
+			BodyHTML   string `json:"body_html"`
+		}{
+			HeaderHTML: headerHTML,
+			BodyHTML:   bodyHTML,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(payload); err != nil {
+			log.Printf("json encode failed: %v", err)
+		}
+	}
+}
+
+func (s *Server) renderPartial(name string, model dashboard.ViewModel) (string, error) {
+	var buf bytes.Buffer
+	if err := s.templates.ExecuteTemplate(&buf, name, model); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func mustSubFS(root fs.FS, path string) fs.FS {
