@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"homelab-dashboard/internal/buildinfo"
 	"homelab-dashboard/internal/config"
 	"homelab-dashboard/internal/dashboard"
 	"homelab-dashboard/internal/kube"
@@ -48,7 +49,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("starting %s on :%s", cfg.AppName, cfg.Port)
+	log.Printf("starting %s version=%s commit=%s on :%s", cfg.AppName, buildinfo.Version, buildinfo.Commit, cfg.Port)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server failed: %v", err)
 	}

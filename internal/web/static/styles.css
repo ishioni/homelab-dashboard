@@ -42,6 +42,8 @@ a {
 }
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   width: 17rem;
   padding: 1.25rem 1rem;
   background: rgba(22, 28, 39, 0.92);
@@ -102,6 +104,17 @@ a {
   flex-direction: column;
   gap: 0.35rem;
   padding-top: 1rem;
+}
+
+.sidebar-meta {
+  margin-top: auto;
+  padding: 1rem 0.75rem 0;
+}
+
+.sidebar-version {
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
 }
 
 .nav-link {

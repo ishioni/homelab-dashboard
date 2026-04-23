@@ -4,6 +4,7 @@ import "time"
 
 type ViewModel struct {
 	AppName        string
+	AppVersion     string
 	ClusterName    string
 	PageTitle      string
 	Screen         string

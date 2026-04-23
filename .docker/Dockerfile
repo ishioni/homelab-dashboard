@@ -2,11 +2,22 @@ FROM golang:1.26 AS build
 
 WORKDIR /src
 
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/homelab-dashboard ./cmd/homelab-dashboard
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w \
+    -X homelab-dashboard/internal/buildinfo.Version=${VERSION} \
+    -X homelab-dashboard/internal/buildinfo.Commit=${COMMIT} \
+    -X homelab-dashboard/internal/buildinfo.BuildDate=${BUILD_DATE}" \
+    -o /out/homelab-dashboard ./cmd/homelab-dashboard
 
 FROM gcr.io/distroless/static-debian12:nonroot
 

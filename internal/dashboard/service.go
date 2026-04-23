@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"homelab-dashboard/internal/buildinfo"
 	"homelab-dashboard/internal/config"
 	"homelab-dashboard/internal/kube"
 	"homelab-dashboard/internal/prom"
@@ -34,6 +35,7 @@ func (s *Service) Hub(ctx context.Context) ViewModel {
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
+		AppVersion:     buildinfo.Version,
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Insight Hub",
 		Screen:         "hub",
@@ -79,6 +81,7 @@ func (s *Service) Security(ctx context.Context) ViewModel {
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
+		AppVersion:     buildinfo.Version,
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Security Posture",
 		Screen:         "security",
@@ -118,6 +121,7 @@ func (s *Service) Anomalies(ctx context.Context) ViewModel {
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
+		AppVersion:     buildinfo.Version,
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Anomaly Explorer",
 		Screen:         "anomalies",
@@ -160,6 +164,7 @@ func (s *Service) Forecast(ctx context.Context) ViewModel {
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
+		AppVersion:     buildinfo.Version,
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Forecasting",
 		Screen:         "forecasting",

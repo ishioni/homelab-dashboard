@@ -71,6 +71,39 @@ ghcr.io/ishioni/homelab-dashboard
 
 The publish workflow runs on pushes to `main`, version tags, and manual dispatches.
 
+## Versioning
+
+The release source of truth is Git tags that follow semantic versioning.
+
+- pushes to `main` publish rolling tags such as `main` and `sha-<commit>`
+- pushing a tag in the form `vX.Y.Z` publishes:
+  - `ghcr.io/ishioni/homelab-dashboard:X.Y.Z`
+  - `ghcr.io/ishioni/homelab-dashboard:X.Y`
+  - `ghcr.io/ishioni/homelab-dashboard:latest`
+
+The built binary embeds:
+
+- version
+- git commit SHA
+- build date
+
+and the app shows the version in the sidebar.
+
+To cut a release:
+
+```bash
+git checkout main
+git pull --ff-only
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+Semver rules:
+
+- bump `MAJOR` for breaking changes
+- bump `MINOR` for backwards-compatible features
+- bump `PATCH` for backwards-compatible fixes
+
 ## Kubernetes deployment
 
 - `deploy/kubernetes/rbac.yaml` contains the service account and read-only RBAC
