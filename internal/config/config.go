@@ -11,6 +11,7 @@ type Config struct {
 	AppName            string
 	ClusterName        string
 	Port               string
+	DemoMode           bool
 	PrometheusURL      string
 	PrometheusTimeout  time.Duration
 	RefreshInterval    time.Duration
@@ -33,6 +34,7 @@ func Load() Config {
 		AppName:           getEnv("APP_NAME", "Homelab Dashboard"),
 		ClusterName:       getEnv("CLUSTER_NAME", "Homelab Cluster"),
 		Port:              getEnv("PORT", "8080"),
+		DemoMode:          getBoolEnv("DEMO_MODE", false),
 		PrometheusURL:     getEnv("PROMETHEUS_URL", "http://thanos-query.monitor.svc.cluster.local:10902"),
 		PrometheusTimeout: getDurationEnv("PROMETHEUS_TIMEOUT", 10*time.Second),
 		RefreshInterval:   getDurationEnv("REFRESH_INTERVAL", 45*time.Second),

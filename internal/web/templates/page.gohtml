@@ -60,6 +60,13 @@
           </div>
         </section>
 
+        {{ if .DemoMode }}
+        <section class="demo-box">
+          <div class="demo-box-title">DEMO MODE</div>
+          <div class="demo-box-detail">This dashboard is rendering synthetic sample data for local demos and design review.</div>
+        </section>
+        {{ end }}
+
         {{ if .Errors }}
         <section class="errors">
           <div class="section-title">Backend notes</div>

@@ -7,6 +7,7 @@ type ViewModel struct {
 	ClusterName    string
 	PageTitle      string
 	Screen         string
+	DemoMode       bool
 	GeneratedAt    time.Time
 	RefreshSeconds int
 	Navigation     []NavItem

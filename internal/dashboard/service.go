@@ -29,7 +29,7 @@ func NewService(cfg config.Config, promClient *prom.Client, kubeClient *kube.Cli
 }
 
 func (s *Service) Hub(ctx context.Context) ViewModel {
-	data, errors := s.collectShared(ctx)
+	data, errors := s.loadShared(ctx)
 	headlines := buildHeadlines(data)
 
 	view := ViewModel{
@@ -37,6 +37,7 @@ func (s *Service) Hub(ctx context.Context) ViewModel {
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Insight Hub",
 		Screen:         "hub",
+		DemoMode:       s.cfg.DemoMode,
 		GeneratedAt:    time.Now(),
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("hub"),
@@ -74,13 +75,14 @@ func (s *Service) Hub(ctx context.Context) ViewModel {
 }
 
 func (s *Service) Security(ctx context.Context) ViewModel {
-	data, errors := s.collectShared(ctx)
+	data, errors := s.loadShared(ctx)
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Security Posture",
 		Screen:         "security",
+		DemoMode:       s.cfg.DemoMode,
 		GeneratedAt:    time.Now(),
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("security"),
@@ -112,13 +114,14 @@ func (s *Service) Security(ctx context.Context) ViewModel {
 }
 
 func (s *Service) Anomalies(ctx context.Context) ViewModel {
-	data, errors := s.collectShared(ctx)
+	data, errors := s.loadShared(ctx)
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Anomaly Explorer",
 		Screen:         "anomalies",
+		DemoMode:       s.cfg.DemoMode,
 		GeneratedAt:    time.Now(),
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("anomalies"),
@@ -149,7 +152,7 @@ func (s *Service) Anomalies(ctx context.Context) ViewModel {
 }
 
 func (s *Service) Forecast(ctx context.Context) ViewModel {
-	data, errors := s.collectShared(ctx)
+	data, errors := s.loadShared(ctx)
 
 	cpuForecast := projectSeries(data.cpuTrend)
 	memForecast := projectSeries(data.memoryTrend)
@@ -160,6 +163,7 @@ func (s *Service) Forecast(ctx context.Context) ViewModel {
 		ClusterName:    s.cfg.ClusterName,
 		PageTitle:      "Forecasting",
 		Screen:         "forecasting",
+		DemoMode:       s.cfg.DemoMode,
 		GeneratedAt:    time.Now(),
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("forecasting"),
@@ -237,6 +241,14 @@ type sharedData struct {
 	cpuTrend          []float64
 	memoryTrend       []float64
 	podTrend          []float64
+}
+
+func (s *Service) loadShared(ctx context.Context) (sharedData, []string) {
+	if s.cfg.DemoMode {
+		return demoSharedData(), nil
+	}
+
+	return s.collectShared(ctx)
 }
 
 func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
@@ -817,4 +829,62 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func demoSharedData() sharedData {
+	now := time.Now()
+	return sharedData{
+		nodesReady:          3,
+		nodesTotal:          3,
+		namespaces:          17,
+		podsRunning:         142,
+		podsPending:         2,
+		podsFailed:          1,
+		targetsHealthy:      96,
+		targetsTotal:        98,
+		clusterCPU:          38.4,
+		clusterMemory:       61.7,
+		fluxReady:           268,
+		fluxNotReady:        3,
+		fluxSuspended:       2,
+		fluxTotal:           273,
+		fluxControllersUp:   5,
+		fluxControllersDown: 1,
+		downTargetCount:     2,
+		restartBurstCount:   4,
+		topCPU: []ResourceStat{
+			{Name: "talos-1", Value: "72.4%", Detail: "5m CPU saturation", Tone: "warning"},
+			{Name: "talos-2", Value: "54.1%", Detail: "5m CPU saturation", Tone: "good"},
+			{Name: "talos-3", Value: "42.8%", Detail: "5m CPU saturation", Tone: "good"},
+		},
+		topMemory: []ResourceStat{
+			{Name: "talos-2", Value: "83.6%", Detail: "Memory saturation", Tone: "warning"},
+			{Name: "talos-1", Value: "61.0%", Detail: "Memory saturation", Tone: "good"},
+			{Name: "talos-3", Value: "40.5%", Detail: "Memory saturation", Tone: "good"},
+		},
+		slowestFlux: []ResourceStat{
+			{Name: "Kustomization/searxng", Value: "2.93s", Detail: "selfhosted", Tone: "warning"},
+			{Name: "Kustomization/cluster-apps", Value: "4.29s", Detail: "flux-system", Tone: "critical"},
+			{Name: "HelmRelease/toolhive-operator", Value: "1.84s", Detail: "ai", Tone: "good"},
+		},
+		fluxKinds: []KindStatus{
+			{Kind: "HelmRelease", Ready: 89, NotReady: 1, Suspended: 2},
+			{Kind: "Kustomization", Ready: 122, NotReady: 2, Suspended: 0},
+			{Kind: "OCIRepository", Ready: 34, NotReady: 0, Suspended: 0},
+			{Kind: "GitRepository", Ready: 18, NotReady: 0, Suspended: 0},
+		},
+		warningEvents: []EventRow{
+			{When: now.Add(-7 * time.Minute), Namespace: "monitor", Reason: "BackOff", Object: "Pod/thanos-query-84ccc68499-gcp9q", Message: "Back-off restarting failed container"},
+			{When: now.Add(-16 * time.Minute), Namespace: "downloads", Reason: "FailedMount", Object: "Pod/radarr-0", Message: "Unable to attach or mount volumes"},
+		},
+		anomalies: []AnomalySignal{
+			{Severity: "critical", Signal: "Target Down", Resource: "thanos-query · 10.0.0.8:10902", Value: "down", Window: "current", Details: "Prometheus scrape failed for this target."},
+			{Severity: "critical", Signal: "Flux Unready", Resource: "Kustomization/cluster-apps", Value: "HealthCheckFailed", Window: "current", Details: "Flux reports this resource as not ready."},
+			{Severity: "warning", Signal: "Restart Burst", Resource: "monitor/alertmanager-kube-prometheus-stack-0", Value: "4 restarts", Window: "30m", Details: "Repeated restarts exceeded the configured threshold."},
+			{Severity: "warning", Signal: "High Node Memory", Resource: "talos-2", Value: "83.6%", Window: "current", Details: "Memory headroom is below the configured threshold."},
+		},
+		cpuTrend:    []float64{22, 24, 27, 26, 29, 31, 34, 36, 33, 35, 39, 38},
+		memoryTrend: []float64{49, 50, 52, 53, 54, 55, 57, 58, 59, 60, 61, 62},
+		podTrend:    []float64{128, 129, 130, 132, 133, 134, 136, 137, 139, 140, 141, 142},
+	}
 }

@@ -20,6 +20,7 @@ All configuration is environment-driven.
 - `PORT` default `8080`
 - `APP_NAME` default `Homelab Dashboard`
 - `CLUSTER_NAME` default `Homelab Cluster`
+- `DEMO_MODE` default `false`
 - `PROMETHEUS_URL` default `http://thanos-query.monitor.svc.cluster.local:10902`
 - `PROMETHEUS_TIMEOUT` default `10s`
 - `REFRESH_INTERVAL` default `45s`
@@ -40,6 +41,14 @@ go run ./cmd/homelab-dashboard
 
 If you are outside the cluster, set `KUBECONFIG` and point `PROMETHEUS_URL` at a reachable Prometheus or Thanos endpoint.
 
+For UI work without a live backend, enable:
+
+```bash
+DEMO_MODE=true go run ./cmd/homelab-dashboard
+```
+
+When enabled, the UI shows a visible `DEMO MODE` box and renders synthetic sample data.
+
 ## Container build
 
 Build from the repository root:
@@ -51,6 +60,16 @@ docker run --rm -p 8080:8080 \
   -e PROMETHEUS_URL="http://host.docker.internal:10902" \
   homelab-dashboard:local
 ```
+
+## Publishing
+
+GitHub Actions builds and publishes multi-arch images to:
+
+```text
+ghcr.io/ishioni/homelab-dashboard
+```
+
+The publish workflow runs on pushes to `main`, version tags, and manual dispatches.
 
 ## Kubernetes deployment
 

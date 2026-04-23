@@ -3,6 +3,8 @@ package dashboard
 import (
 	"strings"
 	"testing"
+
+	"homelab-dashboard/internal/config"
 )
 
 func TestProjectSeries(t *testing.T) {
@@ -93,5 +95,16 @@ func TestParsePercentage(t *testing.T) {
 
 	if got := parsePercentage("bogus"); got != 0 {
 		t.Fatalf("expected invalid percentage to coerce to 0, got %f", got)
+	}
+}
+
+func TestLoadSharedDemoMode(t *testing.T) {
+	service := &Service{cfg: config.Config{DemoMode: true}}
+	data, errs := service.loadShared(t.Context())
+	if len(errs) != 0 {
+		t.Fatalf("expected no backend notes in demo mode, got %d", len(errs))
+	}
+	if data.fluxTotal == 0 || len(data.anomalies) == 0 {
+		t.Fatal("expected populated demo data")
 	}
 }

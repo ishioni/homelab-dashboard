@@ -133,7 +133,8 @@ a {
 .topbar,
 .panel,
 .banner,
-.errors {
+.errors,
+.demo-box {
   background: rgba(26, 32, 43, 0.92);
   border: 1px solid var(--border);
   border-radius: 0.85rem;
@@ -205,8 +206,27 @@ a {
 }
 
 .panel,
-.errors {
+.errors,
+.demo-box {
   padding: 1.1rem 1.15rem;
+}
+
+.demo-box {
+  border-color: rgba(235, 203, 139, 0.65);
+  background: linear-gradient(90deg, rgba(235, 203, 139, 0.12), rgba(26, 32, 43, 0.92));
+}
+
+.demo-box-title {
+  color: var(--warning);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.demo-box-detail {
+  margin-top: 0.45rem;
+  color: var(--text);
 }
 
 .card-grid,
