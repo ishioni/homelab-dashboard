@@ -66,7 +66,7 @@ func (s *Service) Hub(ctx context.Context) ViewModel {
 
 	view.Banner = Banner{
 		Label:  hubStatusLabel(data),
-		Detail: fmt.Sprintf("%d active anomalies across nodes, targets, restarts, and Flux", len(data.anomalies)),
+		Detail: fmt.Sprintf("%d active anomalies across compute, network, storage, and operators", len(data.anomalies)),
 		Tone:   hubStatusTone(data),
 		Actions: []Action{
 			{Label: "Open Security Posture", Path: "/security"},
@@ -92,13 +92,65 @@ func (s *Service) Security(ctx context.Context) ViewModel {
 		Navigation:     s.navigation("security"),
 		Errors:         errors,
 		Security: &SecurityView{
-			FluxCards: []StatCard{
-				{Label: "Flux Controllers", Value: fmt.Sprintf("%.0f", data.fluxControllersUp), Detail: "Prometheus scrape targets in flux-system", Tone: toneByThreshold(data.fluxControllersDown, 0.5)},
-				{Label: "Ready Resources", Value: fmt.Sprintf("%.0f", data.fluxReady), Detail: "Flux resources reporting ready=True", Tone: "good"},
-				{Label: "Not Ready", Value: fmt.Sprintf("%.0f", data.fluxNotReady), Detail: "Flux resources reporting ready!=True", Tone: toneByThreshold(data.fluxNotReady, s.cfg.Thresholds.FluxUnreadyWarnCount)},
-				{Label: "Suspended", Value: fmt.Sprintf("%.0f", data.fluxSuspended), Detail: "Flux resources with reconciliation paused", Tone: toneByThreshold(data.fluxSuspended, 0.5)},
+			SummaryCards: []StatCard{
+				{Label: "Flux Resources", Value: fmt.Sprintf("%.0f", data.fluxTotal), Detail: fmt.Sprintf("%.0f unready · %.0f suspended", data.fluxNotReady, data.fluxSuspended), Tone: toneByIssueCounts(data.fluxNotReady, data.fluxSuspended)},
+				{Label: "Secret Sync", Value: fmt.Sprintf("%.0f ready", data.externalSecretsReady), Detail: fmt.Sprintf("%.0f degraded · %.0f sync errors/24h", data.externalSecretsDegraded, data.externalSecretSyncErrors24h), Tone: toneByIssueCounts(data.externalSecretsDegraded, data.externalSecretSyncErrors24h)},
+				{Label: "Backup Sources", Value: fmt.Sprintf("%.0f protected", data.volsyncSources), Detail: fmt.Sprintf("%.0f drifted · %.0f missed/24h", data.volsyncOutOfSync, data.volsyncMissed24h), Tone: toneByIssueCounts(data.volsyncOutOfSync, data.volsyncMissed24h)},
+				{Label: "CNPG Clusters", Value: fmt.Sprintf("%.0f clusters", data.cnpgClusters), Detail: fmt.Sprintf("%.0f replicas streaming · max lag %s", data.cnpgStreamingReplicas, formatSeconds(data.cnpgMaxReplicationLag)), Tone: toneByThreshold(data.cnpgMaxReplicationLag, 30)},
 			},
-			FluxKinds:      data.fluxKinds,
+			FluxCards:  buildFluxCards(data.fluxKinds),
+			FluxKinds:  data.fluxKinds,
+			FluxRecent: data.fluxRecent,
+			OperatorRows: []SecurityStatusRow{
+				{
+					Icon:   "key",
+					Name:   "External Secrets",
+					State:  fmt.Sprintf("%.0f ready", data.externalSecretsReady),
+					Detail: fmt.Sprintf("%.0f degraded · %.0f sync errors in 24h", data.externalSecretsDegraded, data.externalSecretSyncErrors24h),
+					Meta:   "provider-backed secret sync",
+					Tone:   toneByIssueCounts(data.externalSecretsDegraded, data.externalSecretSyncErrors24h),
+				},
+				{
+					Icon:   "inventory_2",
+					Name:   "VolSync",
+					State:  fmt.Sprintf("%.0f sources", data.volsyncSources),
+					Detail: fmt.Sprintf("%.0f out of sync · %.0f missed in 24h", data.volsyncOutOfSync, data.volsyncMissed24h),
+					Meta:   "replicationsource integrity",
+					Tone:   toneByIssueCounts(data.volsyncOutOfSync, data.volsyncMissed24h),
+				},
+				{
+					Icon:   "database",
+					Name:   "CloudNativePG",
+					State:  fmt.Sprintf("%.0f clusters · %.0f replicas", data.cnpgClusters, data.cnpgStreamingReplicas),
+					Detail: fmt.Sprintf("max replication lag %s", formatSeconds(data.cnpgMaxReplicationLag)),
+					Meta:   "database HA posture",
+					Tone:   toneByThreshold(data.cnpgMaxReplicationLag, 30),
+				},
+				{
+					Icon:   "route",
+					Name:   "Envoy Gateway",
+					State:  fmt.Sprintf("%s req/s", formatRate(data.envoyRequestRate)),
+					Detail: fmt.Sprintf("%s 5xx/s · p95 %s", formatRate(data.envoyErrorRate), formatMilliseconds(data.envoyP95Latency)),
+					Meta:   "edge traffic integrity",
+					Tone:   toneByIssueCounts(data.envoyErrorRate, 0),
+				},
+				{
+					Icon:   "hub",
+					Name:   "Toolhive",
+					State:  fmt.Sprintf("%.0f active connections", data.toolhiveConnections),
+					Detail: fmt.Sprintf("%.0f backend errors in 24h", data.toolhiveBackendErrors24h),
+					Meta:   "MCP gateway health",
+					Tone:   toneByIssueCounts(data.toolhiveBackendErrors24h, 0),
+				},
+				{
+					Icon:   "auto_awesome",
+					Name:   "Renovate",
+					State:  fmt.Sprintf("%.0f projects · %.0f runs/24h", data.renovateProjects, data.renovateExecutions24h),
+					Detail: fmt.Sprintf("%.0f failed · %.0f dependency issues", data.renovateRunsFailed, data.renovateDependencyIssues),
+					Meta:   "platform automation",
+					Tone:   toneByIssueCounts(data.renovateRunsFailed, data.renovateDependencyIssues),
+				},
+			},
 			SlowReconciles: data.slowestFlux,
 			WarningEvents:  data.warningEvents,
 		},
@@ -106,7 +158,7 @@ func (s *Service) Security(ctx context.Context) ViewModel {
 
 	view.Banner = Banner{
 		Label:  securityStatusLabel(data),
-		Detail: fmt.Sprintf("%d Flux objects tracked across %d kinds", int(data.fluxTotal), len(data.fluxKinds)),
+		Detail: "GitOps, secret sync, backup replication, database HA, edge traffic, and operator automation health.",
 		Tone:   securityStatusTone(data),
 		Actions: []Action{
 			{Label: "Back To Hub", Path: "/"},
@@ -133,19 +185,24 @@ func (s *Service) Anomalies(ctx context.Context) ViewModel {
 		Errors:         errors,
 		Anomalies: &AnomaliesView{
 			SummaryCards: []StatCard{
+				{Label: "Active Signals", Value: fmt.Sprintf("%d", len(data.anomalies)), Detail: "Current rule hits across live telemetry", Tone: anomalyBannerTone(data.anomalies)},
 				{Label: "Critical Signals", Value: fmt.Sprintf("%d", countSeverity(data.anomalies, "critical")), Detail: "Immediate remediation required", Tone: "critical"},
-				{Label: "Warning Signals", Value: fmt.Sprintf("%d", countSeverity(data.anomalies, "warning")), Detail: "Thresholds crossed but cluster still serving", Tone: "warning"},
-				{Label: "Targets Down", Value: fmt.Sprintf("%.0f", data.downTargetCount), Detail: "Prometheus targets failing scrapes", Tone: toneByThreshold(data.downTargetCount, s.cfg.Thresholds.UnavailableTargetsWarn)},
-				{Label: "Restart Bursts", Value: fmt.Sprintf("%.0f", data.restartBurstCount), Detail: "Pods restarted in the last 30 minutes", Tone: toneByThreshold(data.restartBurstCount, s.cfg.Thresholds.RestartBurstThreshold)},
+				{Label: "Domains Affected", Value: fmt.Sprintf("%d", countDistinctCategories(data.anomalies)), Detail: "Compute, network, storage, and operators", Tone: "info"},
+				{Label: "Resources Impacted", Value: fmt.Sprintf("%d", countDistinctResources(data.anomalies)), Detail: "Distinct workloads, routes, or controllers involved", Tone: "warning"},
 			},
-			Signals:      data.anomalies,
-			NodePressure: append(data.topCPUToMeters(), data.topMemoryToMeters()...),
+			Signals: data.anomalies,
+			Timeline: []SparklineCard{
+				buildAnomalySparkline("Compute", data.computeSignalTrend, "Scrapes, restarts, node and workload state"),
+				buildAnomalySparkline("Network", data.networkSignalTrend, "Cilium datapath health and Envoy route behavior"),
+				buildAnomalySparkline("Storage", data.storageSignalTrend, "Backups, replication lag, and sync state"),
+				buildAnomalySparkline("Operators", data.operatorSignalTrend, "Flux, Toolhive, External Secrets, and Renovate"),
+			},
 		},
 	}
 
 	view.Banner = Banner{
 		Label:  anomalyBannerLabel(data.anomalies),
-		Detail: "Rule-based detection from live Prometheus signals. No runtime AI involved.",
+		Detail: "Rule-based detection from live Prometheus signals across compute, network, storage, and operators.",
 		Tone:   anomalyBannerTone(data.anomalies),
 		Actions: []Action{
 			{Label: "Open Hub", Path: "/"},
@@ -220,33 +277,56 @@ func (s *Service) Forecast(ctx context.Context) ViewModel {
 }
 
 type sharedData struct {
-	nodesReady        float64
-	nodesTotal        float64
-	namespaces        float64
-	podsRunning       float64
-	podsPending       float64
-	podsFailed        float64
-	targetsHealthy    float64
-	targetsTotal      float64
-	clusterCPU        float64
-	clusterMemory     float64
-	fluxReady         float64
-	fluxNotReady      float64
-	fluxSuspended     float64
-	fluxTotal         float64
-	fluxControllersUp float64
-	fluxControllersDown float64
-	downTargetCount   float64
-	restartBurstCount float64
-	topCPU            []ResourceStat
-	topMemory         []ResourceStat
-	slowestFlux       []ResourceStat
-	fluxKinds         []KindStatus
-	warningEvents     []EventRow
-	anomalies         []AnomalySignal
-	cpuTrend          []float64
-	memoryTrend       []float64
-	podTrend          []float64
+	nodesReady                  float64
+	nodesTotal                  float64
+	namespaces                  float64
+	podsRunning                 float64
+	podsPending                 float64
+	podsFailed                  float64
+	targetsHealthy              float64
+	targetsTotal                float64
+	clusterCPU                  float64
+	clusterMemory               float64
+	fluxReady                   float64
+	fluxNotReady                float64
+	fluxSuspended               float64
+	fluxTotal                   float64
+	fluxControllersUp           float64
+	fluxControllersDown         float64
+	downTargetCount             float64
+	restartBurstCount           float64
+	externalSecretsReady        float64
+	externalSecretsDegraded     float64
+	externalSecretSyncErrors24h float64
+	volsyncSources              float64
+	volsyncOutOfSync            float64
+	volsyncMissed24h            float64
+	cnpgClusters                float64
+	cnpgStreamingReplicas       float64
+	cnpgMaxReplicationLag       float64
+	envoyRequestRate            float64
+	envoyErrorRate              float64
+	envoyP95Latency             float64
+	toolhiveConnections         float64
+	toolhiveBackendErrors24h    float64
+	renovateProjects            float64
+	renovateExecutions24h       float64
+	renovateRunsFailed          float64
+	renovateDependencyIssues    float64
+	topCPU                      []ResourceStat
+	topMemory                   []ResourceStat
+	slowestFlux                 []ResourceStat
+	fluxKinds                   []KindStatus
+	fluxRecent                  []FluxRecentRow
+	warningEvents               []EventRow
+	anomalies                   []AnomalySignal
+	computeSignalTrend          []float64
+	networkSignalTrend          []float64
+	storageSignalTrend          []float64
+	operatorSignalTrend         []float64
+	cpuTrend                    []float64
+	memoryTrend                 []float64
+	podTrend                    []float64
 }
 
 func (s *Service) loadShared(ctx context.Context) (sharedData, []string) {
@@ -268,6 +348,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", query, err))
 			return
+		}
+		if math.IsNaN(value) {
+			value = 0
 		}
 		*dest = value
 	}
@@ -310,6 +393,24 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 	recordScalar(`count(up{namespace="flux-system"}) - sum(up{namespace="flux-system"})`, &data.fluxControllersDown)
 	recordScalar(`count(up == 0)`, &data.downTargetCount)
 	recordScalar(`count(sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > 0)`, &data.restartBurstCount)
+	recordScalar(`sum(externalsecret_status_condition{condition="Ready",status="True"})`, &data.externalSecretsReady)
+	recordScalar(`sum(externalsecret_status_condition{condition="Ready",status!="True"})`, &data.externalSecretsDegraded)
+	recordScalar(`sum(increase(externalsecret_sync_calls_error[24h]))`, &data.externalSecretSyncErrors24h)
+	recordScalar(`count(volsync_missed_intervals_total{role="source"})`, &data.volsyncSources)
+	recordScalar(`sum(volsync_volume_out_of_sync{role="source"})`, &data.volsyncOutOfSync)
+	recordScalar(`sum(increase(volsync_missed_intervals_total{role="source"}[24h]))`, &data.volsyncMissed24h)
+	recordScalar(`count(count by(job) (cnpg_pg_replication_streaming_replicas))`, &data.cnpgClusters)
+	recordScalar(`sum(max by(job) (cnpg_pg_replication_streaming_replicas))`, &data.cnpgStreamingReplicas)
+	recordScalar(`max(cnpg_pg_replication_lag)`, &data.cnpgMaxReplicationLag)
+	recordScalar(`sum(rate(envoy_cluster_external_upstream_rq[5m]))`, &data.envoyRequestRate)
+	recordScalar(`sum(rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class="5"}[5m]))`, &data.envoyErrorRate)
+	recordScalar(`histogram_quantile(0.95, sum(rate(envoy_cluster_external_upstream_rq_time_bucket[5m])) by (le))`, &data.envoyP95Latency)
+	recordScalar(`sum(toolhive_mcp_active_connections)`, &data.toolhiveConnections)
+	recordScalar(`sum(increase(toolhive_vmcp_backend_errors_total[24h]))`, &data.toolhiveBackendErrors24h)
+	recordScalar(`count(renovate_operator_run_failed)`, &data.renovateProjects)
+	recordScalar(`sum(increase(renovate_operator_project_executions_total[24h]))`, &data.renovateExecutions24h)
+	recordScalar(`sum(renovate_operator_run_failed)`, &data.renovateRunsFailed)
+	recordScalar(`sum(renovate_operator_dependency_issues)`, &data.renovateDependencyIssues)
 
 	recordVector(`topk(5, ((1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
 		data.topCPU = make([]ResourceStat, 0, len(values))
@@ -370,6 +471,18 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 
 		data.fluxKinds = make([]KindStatus, 0, len(byKind))
 		for _, entry := range byKind {
+			entry.Total = entry.Ready + entry.NotReady + entry.Suspended
+			switch {
+			case entry.NotReady > 0:
+				entry.Status = "Drift"
+				entry.Tone = "critical"
+			case entry.Suspended > 0:
+				entry.Status = "Paused"
+				entry.Tone = "warning"
+			default:
+				entry.Status = "Ready"
+				entry.Tone = "good"
+			}
 			data.fluxKinds = append(data.fluxKinds, *entry)
 		}
 		sort.Slice(data.fluxKinds, func(i, j int) bool {
@@ -383,6 +496,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				continue
 			}
 			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Compute",
 				Severity: "critical",
 				Signal:   "Target Down",
 				Resource: metricResource(sample.Metric, []string{"job", "instance"}),
@@ -399,6 +513,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				continue
 			}
 			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Compute",
 				Severity: "warning",
 				Signal:   "Restart Burst",
 				Resource: sample.Metric["namespace"] + "/" + sample.Metric["pod"],
@@ -409,34 +524,23 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		}
 	})
 
-	recordVector(`topk(5, ((1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
+	recordVector(`topk(8, max by(namespace,pod,phase) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0)`, func(values []prom.Sample) {
 		for _, sample := range values {
-			if sample.Value < s.cfg.Thresholds.NodeCPUWarnPercent {
+			if sample.Value < 1 {
 				continue
 			}
-			data.anomalies = append(data.anomalies, AnomalySignal{
-				Severity: "warning",
-				Signal:   "High Node CPU",
-				Resource: nodeDisplayName(sample.Metric),
-				Value:    fmt.Sprintf("%.1f%%", sample.Value),
-				Window:   "5m",
-				Details:  "CPU saturation is elevated on this node.",
-			})
-		}
-	})
-
-	recordVector(`topk(5, ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
-		for _, sample := range values {
-			if sample.Value < s.cfg.Thresholds.NodeMemoryWarnPercent {
-				continue
+			severity := "warning"
+			if sample.Metric["phase"] != "Pending" {
+				severity = "critical"
 			}
 			data.anomalies = append(data.anomalies, AnomalySignal{
-				Severity: "warning",
-				Signal:   "High Node Memory",
-				Resource: nodeDisplayName(sample.Metric),
-				Value:    fmt.Sprintf("%.1f%%", sample.Value),
+				Category: "Compute",
+				Severity: severity,
+				Signal:   "Workload State",
+				Resource: sample.Metric["namespace"] + "/" + sample.Metric["pod"],
+				Value:    sample.Metric["phase"],
 				Window:   "current",
-				Details:  "Memory headroom is below the configured threshold.",
+				Details:  "This workload is not in the running state.",
 			})
 		}
 	})
@@ -444,6 +548,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 	recordVector(`topk(8, flux_resource_info{ready!="True"})`, func(values []prom.Sample) {
 		for _, sample := range values {
 			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Operators",
 				Severity: "critical",
 				Signal:   "Flux Unready",
 				Resource: sample.Metric["kind"] + "/" + sample.Metric["name"],
@@ -454,11 +559,252 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		}
 	})
 
+	recordVector(`topk(6, cilium_controllers_failing)`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Network",
+				Severity: "warning",
+				Signal:   "Cilium Controller Failures",
+				Resource: sample.Metric["node"],
+				Value:    fmt.Sprintf("%.0f failing", sample.Value),
+				Window:   "current",
+				Details:  "One or more Cilium controllers are failing on this node.",
+			})
+		}
+	})
+
+	recordVector(`topk(6, cilium_bpf_map_pressure)`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value < 0.10 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Network",
+				Severity: "warning",
+				Signal:   "Cilium BPF Map Pressure",
+				Resource: sample.Metric["node"] + " · " + sample.Metric["map_name"],
+				Value:    fmt.Sprintf("%.1f%%", sample.Value*100),
+				Window:   "current",
+				Details:  "A Cilium BPF map is filling up on this node.",
+			})
+		}
+	})
+
+	recordVector(`topk(6, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])))`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value < 0.02 {
+				continue
+			}
+			severity := "warning"
+			if sample.Value >= 0.10 {
+				severity = "critical"
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Network",
+				Severity: severity,
+				Signal:   "Envoy Error Rate",
+				Resource: sample.Metric["envoy_cluster_name"],
+				Value:    fmt.Sprintf("%.2f req/s", sample.Value),
+				Window:   "5m",
+				Details:  "Upstream 4xx/5xx responses are elevated for this route.",
+			})
+		}
+	})
+
+	recordVector(`topk(6, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m])))`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value < 250 {
+				continue
+			}
+			severity := "warning"
+			if sample.Value >= 500 {
+				severity = "critical"
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Network",
+				Severity: severity,
+				Signal:   "Envoy Latency",
+				Resource: sample.Metric["envoy_cluster_name"],
+				Value:    fmt.Sprintf("%.0f ms", sample.Value),
+				Window:   "5m",
+				Details:  "Average upstream request latency is elevated for this route.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, volsync_volume_out_of_sync{role="source"})`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Storage",
+				Severity: "critical",
+				Signal:   "VolSync Backup Drift",
+				Resource: sample.Metric["obj_namespace"] + "/" + sample.Metric["obj_name"],
+				Value:    "out of sync",
+				Window:   "current",
+				Details:  "This replication source is not synchronized with its backup target.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, increase(volsync_missed_intervals_total{role="source"}[6h]))`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Storage",
+				Severity: "warning",
+				Signal:   "VolSync Missed Schedule",
+				Resource: sample.Metric["obj_namespace"] + "/" + sample.Metric["obj_name"],
+				Value:    fmt.Sprintf("%.0f intervals", sample.Value),
+				Window:   "6h",
+				Details:  "This replication source has missed scheduled backup intervals.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, cnpg_pg_replication_lag)`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 30 {
+				continue
+			}
+			severity := "warning"
+			if sample.Value >= 120 {
+				severity = "critical"
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Storage",
+				Severity: severity,
+				Signal:   "CNPG Replication Lag",
+				Resource: sample.Metric["pod"],
+				Value:    fmt.Sprintf("%.0fs", sample.Value),
+				Window:   "current",
+				Details:  "A PostgreSQL replica is lagging behind its primary.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, cnpg_collector_last_failed_backup_timestamp)`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			age := time.Since(time.Unix(int64(sample.Value), 0))
+			if age > 7*24*time.Hour {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Storage",
+				Severity: "critical",
+				Signal:   "CNPG Backup Failure",
+				Resource: sample.Metric["pod"],
+				Value:    age.Round(time.Hour).String() + " ago",
+				Window:   "7d",
+				Details:  "A recent CloudNativePG backup failure was recorded for this cluster.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, externalsecret_status_condition{condition="Ready",status!="True"} == 1)`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value < 1 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Operators",
+				Severity: "critical",
+				Signal:   "External Secret Not Ready",
+				Resource: sample.Metric["exported_namespace"] + "/" + sample.Metric["name"],
+				Value:    sample.Metric["status"],
+				Window:   "current",
+				Details:  "An ExternalSecret is not reporting a Ready status.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, increase(externalsecret_sync_calls_error[30m]))`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Operators",
+				Severity: "warning",
+				Signal:   "External Secret Sync Errors",
+				Resource: sample.Metric["exported_namespace"] + "/" + sample.Metric["name"],
+				Value:    fmt.Sprintf("%.0f errors", sample.Value),
+				Window:   "30m",
+				Details:  "Recent sync attempts to the provider backend returned errors.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, increase(toolhive_vmcp_backend_errors_total[30m]))`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			target := sample.Metric["target_workload_name"]
+			if target == "" {
+				target = sample.Metric["server"]
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Operators",
+				Severity: "warning",
+				Signal:   "Toolhive Backend Errors",
+				Resource: target,
+				Value:    fmt.Sprintf("%.0f errors", sample.Value),
+				Window:   "30m",
+				Details:  "Toolhive recorded backend request errors for this MCP workload.",
+			})
+		}
+	})
+
+	recordVector(`topk(8, increase(renovate_operator_run_failed[24h]))`, func(values []prom.Sample) {
+		for _, sample := range values {
+			if sample.Value <= 0 {
+				continue
+			}
+			data.anomalies = append(data.anomalies, AnomalySignal{
+				Category: "Operators",
+				Severity: "warning",
+				Signal:   "Renovate Failed Runs",
+				Resource: sample.Metric["project"],
+				Value:    fmt.Sprintf("%.0f failed", sample.Value),
+				Window:   "24h",
+				Details:  "Recent Renovate executions failed for this repository.",
+			})
+		}
+	})
+
+	computeTrendQuery := fmt.Sprintf(`count(max by(job, instance, namespace, pod) (1 - up) > 0) + count(sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > %.0f) + count(max by(namespace,pod,phase) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0)`, s.cfg.Thresholds.RestartBurstThreshold)
+	networkTrendQuery := `count(cilium_controllers_failing > 0) + count(cilium_bpf_map_pressure > 0.10) + count(sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])) > 0.02) + count((sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m]))) > 250)`
+	storageTrendQuery := `count(volsync_volume_out_of_sync{role="source"} > 0) + count(increase(volsync_missed_intervals_total{role="source"}[6h]) > 0) + count(cnpg_pg_replication_lag > 30) + count((time() - cnpg_collector_last_failed_backup_timestamp) < 604800 and cnpg_collector_last_failed_backup_timestamp > 0)`
+	operatorTrendQuery := `count(flux_resource_info{ready!="True"}) + count(increase(toolhive_vmcp_backend_errors_total[30m]) > 0) + count(increase(renovate_operator_run_failed[24h]) > 0) + count(externalsecret_status_condition{condition="Ready",status!="True"} == 1) + count(increase(externalsecret_sync_calls_error[30m]) > 0)`
+
+	recordRange(computeTrendQuery, &data.computeSignalTrend)
+	recordRange(networkTrendQuery, &data.networkSignalTrend)
+	recordRange(storageTrendQuery, &data.storageSignalTrend)
+	recordRange(operatorTrendQuery, &data.operatorSignalTrend)
 	recordRange(`100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30m])))`, &data.cpuTrend)
 	recordRange(`100 * (1 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)))`, &data.memoryTrend)
 	recordRange(`sum(kube_pod_status_phase{phase="Running"})`, &data.podTrend)
 
 	if s.cfg.EnableKubernetes && s.kube != nil {
+		resources, err := s.kube.FluxResources(ctx, 0, s.cfg.NamespaceAllowlist)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("kubernetes flux resources: %v", err))
+		} else {
+			data.fluxKinds = buildFluxKindsFromResources(resources)
+			data.fluxRecent = buildFluxRecentRows(resources, time.Now())
+		}
+
 		events, err := s.kube.WarningEvents(ctx, 8)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("kubernetes warning events: %v", err))
@@ -580,20 +926,24 @@ func hubStatusTone(data sharedData) string {
 }
 
 func securityStatusLabel(data sharedData) string {
-	if securityStatusTone(data) == "good" {
-		return "Flux Reconciliations Healthy"
+	switch securityStatusTone(data) {
+	case "good":
+		return "Platform Integrity Stable"
+	case "warning":
+		return "Integrity Warnings Present"
+	default:
+		return "Integrity Signals Require Attention"
 	}
-	if securityStatusTone(data) == "warning" {
-		return "Flux Drift Signals Present"
-	}
-	return "Flux Health Degraded"
 }
 
 func securityStatusTone(data sharedData) string {
-	if data.fluxNotReady > 0 || data.fluxControllersDown > 0 {
-		if data.fluxControllersUp == 0 {
-			return "critical"
-		}
+	if data.fluxControllersUp == 0 {
+		return "critical"
+	}
+	if data.fluxNotReady > 0 || data.externalSecretsDegraded > 0 || data.volsyncOutOfSync > 0 || data.cnpgMaxReplicationLag >= 120 {
+		return "critical"
+	}
+	if data.fluxSuspended > 0 || data.fluxControllersDown > 0 || data.externalSecretSyncErrors24h > 0 || data.volsyncMissed24h > 0 || data.toolhiveBackendErrors24h > 0 || data.renovateRunsFailed > 0 || data.envoyErrorRate > 0 {
 		return "warning"
 	}
 	return "good"
@@ -711,6 +1061,35 @@ func buildSparkline(label string, values []float64, detail string, warn float64)
 	}
 }
 
+func buildAnomalySparkline(label string, values []float64, detail string) SparklineCard {
+	path := sparklinePath(values, 180, 56)
+	latest := "0"
+	delta := "flat"
+	tone := "good"
+	if len(values) > 0 {
+		current := math.Round(values[len(values)-1])
+		latest = fmt.Sprintf("%.0f active", current)
+		switch {
+		case current >= 4:
+			tone = "critical"
+		case current > 0:
+			tone = "warning"
+		}
+	}
+	if len(values) > 1 {
+		delta = fmt.Sprintf("%+.0f vs start", math.Round(values[len(values)-1]-values[0]))
+	}
+
+	return SparklineCard{
+		Label:  label,
+		Path:   path,
+		Latest: latest,
+		Delta:  delta,
+		Detail: detail,
+		Tone:   tone,
+	}
+}
+
 func sparklinePath(values []float64, width, height float64) string {
 	if len(values) == 0 {
 		return ""
@@ -769,6 +1148,28 @@ func countSeverity(signals []AnomalySignal, severity string) int {
 	return count
 }
 
+func countDistinctCategories(signals []AnomalySignal) int {
+	seen := make(map[string]struct{}, len(signals))
+	for _, signal := range signals {
+		if signal.Category == "" {
+			continue
+		}
+		seen[signal.Category] = struct{}{}
+	}
+	return len(seen)
+}
+
+func countDistinctResources(signals []AnomalySignal) int {
+	seen := make(map[string]struct{}, len(signals))
+	for _, signal := range signals {
+		if signal.Resource == "" {
+			continue
+		}
+		seen[signal.Resource] = struct{}{}
+	}
+	return len(seen)
+}
+
 func compactResourceName(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -809,6 +1210,125 @@ func metricResource(metric map[string]string, keys []string) string {
 	return strings.Join(parts, " · ")
 }
 
+func buildFluxCards(kinds []KindStatus) []StatCard {
+	byKind := make(map[string]KindStatus, len(kinds))
+	for _, kind := range kinds {
+		byKind[kind.Kind] = kind
+	}
+
+	sourceTotal := KindStatus{Kind: "Sources"}
+	for _, sourceKind := range []string{"GitRepository", "OCIRepository"} {
+		kind := byKind[sourceKind]
+		sourceTotal.Ready += kind.Ready
+		sourceTotal.NotReady += kind.NotReady
+		sourceTotal.Suspended += kind.Suspended
+		sourceTotal.Total += kind.Total
+	}
+	sourceTotal.Tone = toneByIssueCounts(float64(sourceTotal.NotReady), float64(sourceTotal.Suspended))
+
+	order := []struct {
+		key   string
+		label string
+	}{
+		{key: "Kustomization", label: "Kustomizations"},
+		{key: "HelmRelease", label: "Helm Releases"},
+		{key: "Sources", label: "Sources"},
+		{key: "GitRepository", label: "Git Repositories"},
+		{key: "OCIRepository", label: "OCI Repositories"},
+	}
+
+	cards := make([]StatCard, 0, len(order))
+	for _, item := range order {
+		kind := sourceTotal
+		if item.key != "Sources" {
+			kind = byKind[item.key]
+		}
+		detail := fmt.Sprintf("%d ready", kind.Ready)
+		switch {
+		case kind.NotReady > 0 && kind.Suspended > 0:
+			detail = fmt.Sprintf("%d ready · %d drifted · %d suspended", kind.Ready, kind.NotReady, kind.Suspended)
+		case kind.NotReady > 0:
+			detail = fmt.Sprintf("%d ready · %d drifted", kind.Ready, kind.NotReady)
+		case kind.Suspended > 0:
+			detail = fmt.Sprintf("%d ready · %d suspended", kind.Ready, kind.Suspended)
+		}
+		cards = append(cards, StatCard{
+			Label:  item.label,
+			Value:  fmt.Sprintf("%d", kind.Total),
+			Detail: detail,
+			Tone:   toneByIssueCounts(float64(kind.NotReady), float64(kind.Suspended)),
+		})
+	}
+	return cards
+}
+
+func buildFluxKindsFromResources(resources []kube.FluxResource) []KindStatus {
+	byKind := map[string]*KindStatus{}
+	for _, resource := range resources {
+		entry, ok := byKind[resource.Kind]
+		if !ok {
+			entry = &KindStatus{Kind: resource.Kind}
+			byKind[resource.Kind] = entry
+		}
+		entry.Total++
+		switch {
+		case resource.Suspended:
+			entry.Suspended++
+		case resource.Ready:
+			entry.Ready++
+		default:
+			entry.NotReady++
+		}
+	}
+
+	result := make([]KindStatus, 0, len(byKind))
+	for _, entry := range byKind {
+		switch {
+		case entry.NotReady > 0:
+			entry.Status = "Drift"
+			entry.Tone = "critical"
+		case entry.Suspended > 0:
+			entry.Status = "Paused"
+			entry.Tone = "warning"
+		default:
+			entry.Status = "Ready"
+			entry.Tone = "good"
+		}
+		result = append(result, *entry)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Kind < result[j].Kind
+	})
+
+	return result
+}
+
+func buildFluxRecentRows(resources []kube.FluxResource, now time.Time) []FluxRecentRow {
+	rows := make([]FluxRecentRow, 0, 16)
+	for _, resource := range resources {
+		if resource.Kind != "HelmRelease" || resource.LastTransition.IsZero() {
+			continue
+		}
+		rows = append(rows, FluxRecentRow{
+			Kind:      resource.Kind,
+			Name:      resource.Name,
+			Namespace: resource.Namespace,
+			Status:    resource.Status,
+			Age:       compactDuration(now.Sub(resource.LastTransition)),
+			Tone:      fluxStatusTone(resource.Status),
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Namespace != rows[j].Namespace {
+			return rows[i].Namespace < rows[j].Namespace
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	return rows
+}
+
 func parsePercentage(value string) float64 {
 	trimmed := strings.TrimSuffix(strings.TrimSpace(value), "%")
 	parsed, err := strconv.ParseFloat(trimmed, 64)
@@ -836,6 +1356,48 @@ func severityRank(severity string) int {
 	}
 }
 
+func formatRate(value float64) string {
+	return fmt.Sprintf("%.1f", value)
+}
+
+func formatMilliseconds(value float64) string {
+	return fmt.Sprintf("%.0fms", value)
+}
+
+func formatSeconds(value float64) string {
+	if value < 1 {
+		return fmt.Sprintf("%.0fms", value*1000)
+	}
+	if value < 60 {
+		return fmt.Sprintf("%.0fs", value)
+	}
+	return (time.Duration(value) * time.Second).Round(time.Minute).String()
+}
+
+func compactDuration(value time.Duration) string {
+	if value < time.Minute {
+		return "<1m"
+	}
+	if value < time.Hour {
+		return fmt.Sprintf("%dm", int(value.Round(time.Minute)/time.Minute))
+	}
+	if value < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(value.Round(time.Hour)/time.Hour))
+	}
+	return fmt.Sprintf("%dd", int(value.Round(24*time.Hour)/(24*time.Hour)))
+}
+
+func fluxStatusTone(status string) string {
+	switch status {
+	case "Ready":
+		return "good"
+	case "Suspended", "Reconciling", "Pending":
+		return "warning"
+	default:
+		return "critical"
+	}
+}
+
 func containsString(values []string, needle string) bool {
 	for _, value := range values {
 		if value == needle {
@@ -855,24 +1417,42 @@ func maxInt(a, b int) int {
 func demoSharedData() sharedData {
 	now := time.Now()
 	return sharedData{
-		nodesReady:          3,
-		nodesTotal:          3,
-		namespaces:          17,
-		podsRunning:         142,
-		podsPending:         2,
-		podsFailed:          1,
-		targetsHealthy:      96,
-		targetsTotal:        98,
-		clusterCPU:          38.4,
-		clusterMemory:       61.7,
-		fluxReady:           268,
-		fluxNotReady:        3,
-		fluxSuspended:       2,
-		fluxTotal:           273,
-		fluxControllersUp:   5,
-		fluxControllersDown: 1,
-		downTargetCount:     2,
-		restartBurstCount:   4,
+		nodesReady:                  3,
+		nodesTotal:                  3,
+		namespaces:                  17,
+		podsRunning:                 142,
+		podsPending:                 2,
+		podsFailed:                  1,
+		targetsHealthy:              96,
+		targetsTotal:                98,
+		clusterCPU:                  38.4,
+		clusterMemory:               61.7,
+		fluxReady:                   268,
+		fluxNotReady:                3,
+		fluxSuspended:               2,
+		fluxTotal:                   273,
+		fluxControllersUp:           5,
+		fluxControllersDown:         1,
+		downTargetCount:             2,
+		restartBurstCount:           4,
+		externalSecretsReady:        67,
+		externalSecretsDegraded:     1,
+		externalSecretSyncErrors24h: 2,
+		volsyncSources:              11,
+		volsyncOutOfSync:            1,
+		volsyncMissed24h:            2,
+		cnpgClusters:                2,
+		cnpgStreamingReplicas:       4,
+		cnpgMaxReplicationLag:       41,
+		envoyRequestRate:            5.2,
+		envoyErrorRate:              0.2,
+		envoyP95Latency:             132,
+		toolhiveConnections:         3,
+		toolhiveBackendErrors24h:    6,
+		renovateProjects:            3,
+		renovateExecutions24h:       74,
+		renovateRunsFailed:          1,
+		renovateDependencyIssues:    2,
 		topCPU: []ResourceStat{
 			{Name: "talos-1", Value: "72.4%", Detail: "5m CPU saturation", Tone: "warning"},
 			{Name: "talos-2", Value: "54.1%", Detail: "5m CPU saturation", Tone: "good"},
@@ -889,23 +1469,33 @@ func demoSharedData() sharedData {
 			{Name: "HelmRelease/toolhive-operator", Value: "1.84s", Detail: "ai", Tone: "good"},
 		},
 		fluxKinds: []KindStatus{
-			{Kind: "HelmRelease", Ready: 89, NotReady: 1, Suspended: 2},
-			{Kind: "Kustomization", Ready: 122, NotReady: 2, Suspended: 0},
-			{Kind: "OCIRepository", Ready: 34, NotReady: 0, Suspended: 0},
-			{Kind: "GitRepository", Ready: 18, NotReady: 0, Suspended: 0},
+			{Kind: "HelmRelease", Ready: 89, NotReady: 1, Suspended: 2, Total: 92, Status: "Drift", Tone: "critical"},
+			{Kind: "Kustomization", Ready: 122, NotReady: 2, Suspended: 0, Total: 124, Status: "Drift", Tone: "critical"},
+			{Kind: "OCIRepository", Ready: 34, NotReady: 0, Suspended: 0, Total: 34, Status: "Ready", Tone: "good"},
+			{Kind: "GitRepository", Ready: 18, NotReady: 0, Suspended: 0, Total: 18, Status: "Ready", Tone: "good"},
+		},
+		fluxRecent: []FluxRecentRow{
+			{Kind: "Kustomization", Name: "cluster-apps", Namespace: "flux-system", Status: "Ready", Age: "2m", Tone: "good"},
+			{Kind: "Kustomization", Name: "monitoring-stack", Namespace: "monitor", Status: "Ready", Age: "4m", Tone: "good"},
+			{Kind: "HelmRelease", Name: "toolhive-operator", Namespace: "ai", Status: "Reconciling", Age: "7m", Tone: "warning"},
+			{Kind: "OCIRepository", Name: "searxng", Namespace: "selfhosted", Status: "Ready", Age: "9m", Tone: "good"},
 		},
 		warningEvents: []EventRow{
 			{When: now.Add(-7 * time.Minute), Namespace: "monitor", Reason: "BackOff", Object: "Pod/thanos-query-84ccc68499-gcp9q", Message: "Back-off restarting failed container"},
 			{When: now.Add(-16 * time.Minute), Namespace: "downloads", Reason: "FailedMount", Object: "Pod/radarr-0", Message: "Unable to attach or mount volumes"},
 		},
 		anomalies: []AnomalySignal{
-			{Severity: "critical", Signal: "Target Down", Resource: "thanos-query · 10.0.0.8:10902", Value: "down", Window: "current", Details: "Prometheus scrape failed for this target."},
-			{Severity: "critical", Signal: "Flux Unready", Resource: "Kustomization/cluster-apps", Value: "HealthCheckFailed", Window: "current", Details: "Flux reports this resource as not ready."},
-			{Severity: "warning", Signal: "Restart Burst", Resource: "monitor/alertmanager-kube-prometheus-stack-0", Value: "4 restarts", Window: "30m", Details: "Repeated restarts exceeded the configured threshold."},
-			{Severity: "warning", Signal: "High Node Memory", Resource: "talos-2", Value: "83.6%", Window: "current", Details: "Memory headroom is below the configured threshold."},
+			{Category: "Compute", Severity: "critical", Signal: "Target Down", Resource: "thanos-query · 10.0.0.8:10902", Value: "down", Window: "current", Details: "Prometheus scrape failed for this target."},
+			{Category: "Operators", Severity: "critical", Signal: "Flux Unready", Resource: "Kustomization/cluster-apps", Value: "HealthCheckFailed", Window: "current", Details: "Flux reports this resource as not ready."},
+			{Category: "Storage", Severity: "warning", Signal: "VolSync Missed Schedule", Resource: "security/authentik-rsrc", Value: "1 intervals", Window: "6h", Details: "This replication source has missed a scheduled backup interval."},
+			{Category: "Network", Severity: "warning", Signal: "Envoy Latency", Resource: "httproute/monitor/homelab-dashboard/rule/0", Value: "312 ms", Window: "5m", Details: "Average upstream request latency is elevated for this route."},
 		},
-		cpuTrend:    []float64{22, 24, 27, 26, 29, 31, 34, 36, 33, 35, 39, 38},
-		memoryTrend: []float64{49, 50, 52, 53, 54, 55, 57, 58, 59, 60, 61, 62},
-		podTrend:    []float64{128, 129, 130, 132, 133, 134, 136, 137, 139, 140, 141, 142},
+		computeSignalTrend:  []float64{1, 1, 2, 2, 3, 2, 2, 1, 1, 2, 2, 1},
+		networkSignalTrend:  []float64{0, 1, 1, 2, 2, 1, 1, 0, 1, 1, 2, 1},
+		storageSignalTrend:  []float64{0, 0, 1, 1, 1, 2, 1, 1, 0, 1, 1, 1},
+		operatorSignalTrend: []float64{1, 1, 1, 2, 2, 2, 3, 2, 2, 1, 1, 1},
+		cpuTrend:            []float64{22, 24, 27, 26, 29, 31, 34, 36, 33, 35, 39, 38},
+		memoryTrend:         []float64{49, 50, 52, 53, 54, 55, 57, 58, 59, 60, 61, 62},
+		podTrend:            []float64{128, 129, 130, 132, 133, 134, 136, 137, 139, 140, 141, 142},
 	}
 }

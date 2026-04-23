@@ -1,0 +1,125 @@
+{{ define "security_body" }}
+{{ template "page_common" . }}
+
+<section class="panel">
+  <div class="section-title">GitOps & integrity posture</div>
+  <div class="card-grid">
+    {{ range .Security.SummaryCards }}
+    <article class="status-card status-card--accent tone-{{ .Tone }}">
+      <div class="metric-label">{{ .Label }}</div>
+      <div class="status-card-value">{{ .Value }}</div>
+      <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+    </article>
+    {{ end }}
+  </div>
+</section>
+
+<section class="security-layout">
+  <article class="panel security-main-panel">
+    <div class="security-panel-head">
+      <div class="security-panel-title">
+        <span class="material-symbols-outlined">compare_arrows</span>
+        <span>Flux Drift Detection</span>
+      </div>
+    </div>
+
+    <div class="flux-card-grid">
+      {{ range .Security.FluxCards }}
+      <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+        <div class="metric-label">{{ .Label }}</div>
+        <div class="status-card-value">{{ .Value }}</div>
+        <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+      </article>
+      {{ end }}
+    </div>
+
+    <div class="flux-recent">
+      <div class="flux-recent-header list-grid-header">
+        <div>HELM RELEASE</div>
+        <div>NAMESPACE</div>
+        <div>STATUS</div>
+        <div>AGE</div>
+      </div>
+      <div class="flux-recent-scroll">
+      {{ if .Security.FluxRecent }}
+      {{ range .Security.FluxRecent }}
+      <div class="flux-recent-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+        <div class="flux-resource-cell">
+          <span class="flux-resource-mark"></span>
+          <div>
+            <div class="row-title">{{ .Name }}</div>
+            <div class="row-detail">HelmRelease</div>
+          </div>
+        </div>
+        <div class="security-row-detail">{{ .Namespace }}</div>
+        <div>
+          <span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span>
+        </div>
+        <div class="row-meta">{{ .Age }}</div>
+      </div>
+      {{ end }}
+      {{ else }}
+      <div class="empty">No HelmRelease status data is available from Flux right now.</div>
+      {{ end }}
+      </div>
+    </div>
+  </article>
+
+  <div class="security-sidebar">
+    <article class="panel">
+      <div class="section-title">Platform integrity</div>
+      <div class="integrity-list">
+        {{ range .Security.OperatorRows }}
+        <div class="integrity-row">
+          <div class="integrity-copy">
+            <div class="integrity-title">
+              <span class="material-symbols-outlined tone-{{ .Tone }}">{{ .Icon }}</span>
+              <span>{{ .Name }}</span>
+            </div>
+            <div class="integrity-detail">{{ .Detail }}</div>
+          </div>
+          <div class="integrity-meta">
+            <div class="tiny-chip tone-{{ .Tone }}">{{ .State }}</div>
+            <div class="row-meta">{{ .Meta }}</div>
+          </div>
+        </div>
+        {{ end }}
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="section-title">Slowest reconciliations</div>
+      <div class="table">
+        {{ range .Security.SlowReconciles }}
+        <div class="table-row">
+          <div>
+            <div class="row-title">{{ .Name }}</div>
+            <div class="row-detail">{{ .Detail }}</div>
+          </div>
+          <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
+        </div>
+        {{ end }}
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">Latest warning events</div>
+  {{ if .Security.WarningEvents }}
+  <div class="table">
+    {{ range .Security.WarningEvents }}
+    <div class="table-row">
+      <div>
+        <div class="row-title">{{ .Reason }} · {{ .Object }}</div>
+        <div class="row-detail">{{ .Namespace }} · {{ .Message }}</div>
+      </div>
+      <div class="row-meta">{{ ago .When }}</div>
+    </div>
+    {{ end }}
+  </div>
+  {{ else }}
+  <div class="empty">No warning events available from the Kubernetes API.</div>
+  {{ end }}
+</section>
+{{ end }}

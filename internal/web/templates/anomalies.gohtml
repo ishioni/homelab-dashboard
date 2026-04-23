@@ -1,0 +1,72 @@
+{{ define "anomalies_body" }}
+{{ template "page_common" . }}
+
+<section class="panel">
+  <div class="section-title">Signal summary</div>
+  <div class="card-grid">
+    {{ range .Anomalies.SummaryCards }}
+    <article class="status-card status-card--accent tone-{{ .Tone }}">
+      <div class="metric-label">{{ .Label }}</div>
+      <div class="status-card-value">{{ .Value }}</div>
+      <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+    </article>
+    {{ end }}
+  </div>
+</section>
+
+<section class="two-column">
+  <article class="panel">
+    <div class="section-title">Active anomaly signals</div>
+    {{ if .Anomalies.Signals }}
+    <div class="table">
+      {{ range .Anomalies.Signals }}
+      <div class="table-row anomaly-row">
+        <div class="anomaly-row-copy">
+          <div class="row-title-group">
+            <div class="row-title">{{ .Signal }}</div>
+            <div class="signal-category">{{ .Category }}</div>
+          </div>
+          <div class="signal-resource">{{ .Resource }}</div>
+          <div class="row-detail">{{ .Details }}</div>
+        </div>
+        <div class="anomaly-meta">
+          <div class="signal-indicator tone-{{ .Severity }}">
+            <span class="indicator-mark">
+              <span class="material-symbols-outlined">{{ anomalyIcon .Severity }}</span>
+            </span>
+            <span class="indicator-value">{{ .Value }}</span>
+          </div>
+          <div class="row-meta">{{ .Window }}</div>
+        </div>
+      </div>
+      {{ end }}
+    </div>
+    {{ else }}
+    <div class="empty">No current anomalies crossed the configured thresholds.</div>
+    {{ end }}
+  </article>
+
+  <article class="panel">
+    <div class="section-title">Signal Timeline</div>
+    {{ range .Anomalies.Timeline }}
+    <div class="timeline-row">
+      <div class="timeline-header">
+        <div class="row-title">{{ .Label }}</div>
+        <div class="timeline-meta tone-{{ .Tone }}">
+          <div class="signal-indicator tone-{{ .Tone }}">
+            <span class="indicator-mark">
+              <span class="material-symbols-outlined">{{ anomalyIcon .Tone }}</span>
+            </span>
+            <span class="indicator-value">{{ .Latest }}</span>
+          </div>
+          <div class="row-meta">{{ .Delta }}</div>
+        </div>
+      </div>
+      <svg class="sparkline anomaly-sparkline" viewBox="0 0 180 56" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}">
+        <path d="{{ .Path }}"></path>
+      </svg>
+    </div>
+    {{ end }}
+  </article>
+</section>
+{{ end }}

@@ -1,0 +1,40 @@
+{{ define "forecasting_body" }}
+{{ template "page_common" . }}
+
+<section class="panel">
+  <div class="section-title">Trend projections</div>
+  <div class="card-grid">
+    {{ range .Forecast.ForecastCards }}
+    <article class="forecast-card tone-{{ .Tone }}">
+      <div class="metric-label">{{ .Label }}</div>
+      <div class="forecast-current">{{ .Current }}</div>
+      <div class="forecast-projection">{{ .Projection }}</div>
+      <div class="metric-detail">{{ .Trend }}</div>
+    </article>
+    {{ end }}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">Historical series</div>
+  <div class="sparkline-grid">
+    {{ range .Forecast.Series }}
+    <article class="spark-card">
+      <div class="spark-header">
+        <div>
+          <div class="row-title">{{ .Label }}</div>
+          <div class="row-detail">{{ .Detail }}</div>
+        </div>
+        <div class="spark-meta">
+          <div class="pill tone-{{ .Tone }}">{{ .Latest }}</div>
+          <div class="row-meta">{{ .Delta }}</div>
+        </div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 180 56" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}">
+        <path d="{{ .Path }}"></path>
+      </svg>
+    </article>
+    {{ end }}
+  </div>
+</section>
+{{ end }}

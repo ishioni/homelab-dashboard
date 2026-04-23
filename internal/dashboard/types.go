@@ -49,8 +49,11 @@ type HubView struct {
 }
 
 type SecurityView struct {
+	SummaryCards   []StatCard
 	FluxCards      []StatCard
 	FluxKinds      []KindStatus
+	FluxRecent     []FluxRecentRow
+	OperatorRows   []SecurityStatusRow
 	SlowReconciles []ResourceStat
 	WarningEvents  []EventRow
 }
@@ -58,7 +61,7 @@ type SecurityView struct {
 type AnomaliesView struct {
 	SummaryCards []StatCard
 	Signals      []AnomalySignal
-	NodePressure []UsageMeter
+	Timeline     []SparklineCard
 }
 
 type ForecastView struct {
@@ -101,9 +104,31 @@ type KindStatus struct {
 	Ready     int
 	NotReady  int
 	Suspended int
+	Total     int
+	Status    string
+	Tone      string
+}
+
+type SecurityStatusRow struct {
+	Icon   string
+	Name   string
+	State  string
+	Detail string
+	Meta   string
+	Tone   string
+}
+
+type FluxRecentRow struct {
+	Kind      string
+	Name      string
+	Namespace string
+	Status    string
+	Age       string
+	Tone      string
 }
 
 type AnomalySignal struct {
+	Category string
 	Severity string
 	Signal   string
 	Resource string
@@ -121,10 +146,10 @@ type ForecastCard struct {
 }
 
 type SparklineCard struct {
-	Label   string
-	Path    string
-	Latest  string
-	Delta   string
-	Detail  string
-	Tone    string
+	Label  string
+	Path   string
+	Latest string
+	Delta  string
+	Detail string
+	Tone   string
 }
