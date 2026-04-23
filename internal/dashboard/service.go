@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -310,11 +311,11 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 	recordScalar(`count(up == 0)`, &data.downTargetCount)
 	recordScalar(`count(sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > 0)`, &data.restartBurstCount)
 
-	recordVector(`topk(5, (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100)`, func(values []prom.Sample) {
+	recordVector(`topk(5, ((1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
 		data.topCPU = make([]ResourceStat, 0, len(values))
 		for _, sample := range values {
 			data.topCPU = append(data.topCPU, ResourceStat{
-				Name:   compactResourceName(sample.Metric["instance"]),
+				Name:   nodeDisplayName(sample.Metric),
 				Value:  fmt.Sprintf("%.1f%%", sample.Value),
 				Detail: "5m CPU saturation",
 				Tone:   toneByThreshold(sample.Value, s.cfg.Thresholds.NodeCPUWarnPercent),
@@ -322,11 +323,11 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		}
 	})
 
-	recordVector(`topk(5, (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)`, func(values []prom.Sample) {
+	recordVector(`topk(5, ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
 		data.topMemory = make([]ResourceStat, 0, len(values))
 		for _, sample := range values {
 			data.topMemory = append(data.topMemory, ResourceStat{
-				Name:   compactResourceName(sample.Metric["instance"]),
+				Name:   nodeDisplayName(sample.Metric),
 				Value:  fmt.Sprintf("%.1f%%", sample.Value),
 				Detail: "Memory saturation",
 				Tone:   toneByThreshold(sample.Value, s.cfg.Thresholds.NodeMemoryWarnPercent),
@@ -408,7 +409,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		}
 	})
 
-	recordVector(`topk(5, (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100)`, func(values []prom.Sample) {
+	recordVector(`topk(5, ((1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < s.cfg.Thresholds.NodeCPUWarnPercent {
 				continue
@@ -416,7 +417,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			data.anomalies = append(data.anomalies, AnomalySignal{
 				Severity: "warning",
 				Signal:   "High Node CPU",
-				Resource: compactResourceName(sample.Metric["instance"]),
+				Resource: nodeDisplayName(sample.Metric),
 				Value:    fmt.Sprintf("%.1f%%", sample.Value),
 				Window:   "5m",
 				Details:  "CPU saturation is elevated on this node.",
@@ -424,7 +425,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		}
 	})
 
-	recordVector(`topk(5, (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)`, func(values []prom.Sample) {
+	recordVector(`topk(5, ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < s.cfg.Thresholds.NodeMemoryWarnPercent {
 				continue
@@ -432,7 +433,7 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			data.anomalies = append(data.anomalies, AnomalySignal{
 				Severity: "warning",
 				Signal:   "High Node Memory",
-				Resource: compactResourceName(sample.Metric["instance"]),
+				Resource: nodeDisplayName(sample.Metric),
 				Value:    fmt.Sprintf("%.1f%%", sample.Value),
 				Window:   "current",
 				Details:  "Memory headroom is below the configured threshold.",
@@ -778,6 +779,21 @@ func compactResourceName(value string) string {
 		host = host[:idx]
 	}
 	return host
+}
+
+func nodeDisplayName(metric map[string]string) string {
+	instance := compactResourceName(metric["instance"])
+	if instance != "" && net.ParseIP(instance) == nil {
+		return instance
+	}
+
+	for _, key := range []string{"nodename", "kubernetes_node", "node"} {
+		if value := strings.TrimSpace(metric[key]); value != "" {
+			return value
+		}
+	}
+
+	return instance
 }
 
 func metricResource(metric map[string]string, keys []string) string {
