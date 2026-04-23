@@ -1,0 +1,519 @@
+<!doctype html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Global AI Insight Hub - Homelab Cluster-01</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-container": "#90bdbc",
+              "surface-container-highest": "#2f3541",
+              "on-tertiary-fixed": "#001c37",
+              "surface-tint": "#97cfe0",
+              "error-container": "#93000a",
+              "on-tertiary-container": "#254a72",
+              "on-secondary": "#023736",
+              "secondary-fixed": "#bdebea",
+              "inverse-primary": "#2b6674",
+              "on-primary": "#003640",
+              "surface-variant": "#2f3541",
+              "surface-container-high": "#242a36",
+              "primary-fixed": "#b3ecfc",
+              "surface-container-lowest": "#080e19",
+              "secondary-container": "#214e4d",
+              "inverse-on-surface": "#2b313c",
+              "inverse-surface": "#dde2f2",
+              "on-error": "#690005",
+              "on-surface": "#dde2f2",
+              "outline-variant": "#40484b",
+              primary: "#a3dcec",
+              secondary: "#a1cfce",
+              "on-primary-fixed-variant": "#094e5c",
+              background: "#0d131e",
+              "primary-container": "#88c0d0",
+              "surface-container-low": "#161c27",
+              "surface-dim": "#0d131e",
+              surface: "#0d131e",
+              "on-primary-container": "#0c4f5d",
+              "tertiary-fixed": "#d2e4ff",
+              "on-primary-fixed": "#001f26",
+              "secondary-fixed-dim": "#a1cfce",
+              "on-background": "#dde2f2",
+              "tertiary-container": "#97bae8",
+              "on-secondary-fixed-variant": "#214e4d",
+              "surface-container": "#1a202b",
+              "on-surface-variant": "#c0c8cb",
+              "primary-fixed-dim": "#97cfe0",
+              "on-tertiary-fixed-variant": "#234970",
+              "surface-bright": "#333945",
+              "on-error-container": "#ffdad6",
+              "on-tertiary": "#033258",
+              error: "#ffb4ab",
+              outline: "#8a9295",
+              "on-secondary-fixed": "#002020",
+              tertiary: "#b7d5ff",
+              "tertiary-fixed-dim": "#a6c9f8",
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
+            spacing: {
+              md: "16px",
+              xs: "4px",
+              xl: "40px",
+              lg: "24px",
+              sm: "8px",
+              gutter: "16px",
+              margin: "24px",
+              base: "4px",
+            },
+            fontFamily: {
+              "body-sm": ["Inter"],
+              h2: ["Inter"],
+              "code-block": ["JetBrains Mono"],
+              "data-label": ["Inter"],
+              "body-lg": ["Inter"],
+              h1: ["Inter"],
+              "data-display": ["JetBrains Mono"],
+            },
+            fontSize: {
+              "body-sm": ["14px", {lineHeight: "1.5", fontWeight: "400"}],
+              h2: ["24px", {lineHeight: "1.3", fontWeight: "600"}],
+              "code-block": ["13px", {lineHeight: "1.6", fontWeight: "400"}],
+              "data-label": [
+                "12px",
+                {lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "500"},
+              ],
+              "body-lg": ["16px", {lineHeight: "1.5", fontWeight: "400"}],
+              h1: ["32px", {lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600"}],
+              "data-display": ["14px", {lineHeight: "1.4", fontWeight: "500"}],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings:
+          "FILL" 0,
+          "wght" 400,
+          "GRAD" 0,
+          "opsz" 24;
+      }
+      .material-symbols-outlined[style*="FILL' 1"] {
+        font-variation-settings:
+          "FILL" 1,
+          "wght" 400,
+          "GRAD" 0,
+          "opsz" 24;
+      }
+    </style>
+  </head>
+  <body class="bg-surface text-on-surface font-body-sm text-body-sm min-h-screen flex antialiased">
+    <!-- SideNavBar -->
+    <nav
+      class="hidden md:flex flex-col bg-slate-900 dark:bg-[#3B4252] h-screen w-64 border-r border-slate-800 dark:border-[#434C5E] fixed left-0 top-0 pt-4 z-20"
+    >
+      <div class="px-6 mb-8 flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center">
+          <span
+            class="material-symbols-outlined text-on-primary-container"
+            style="font-variation-settings: &quot;FILL&quot; 1"
+            >dataset</span
+          >
+        </div>
+        <div>
+          <h2 class="text-xl font-black text-[#ECEFF4] tracking-tight">AI Insights</h2>
+          <p class="font-data-label text-data-label text-slate-400 dark:text-[#E5E9F0] uppercase">
+            SRE Arctic Node
+          </p>
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col space-y-1 px-3">
+        <a
+          class="flex items-center space-x-3 px-4 py-3 rounded-lg text-[#88C0D0] bg-[#434C5E]/50 border-l-2 border-[#88C0D0] active:scale-[0.98] transition-all duration-150"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="hub">hub</span>
+          <span class="font-body-sm text-body-sm font-medium">Insight Hub</span>
+        </a>
+        <a
+          class="flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] active:scale-[0.98] transition-all duration-150"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+          <span class="font-body-sm text-body-sm font-medium">Forecasting</span>
+        </a>
+        <a
+          class="flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] active:scale-[0.98] transition-all duration-150"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+          <span class="font-body-sm text-body-sm font-medium">Anomaly Explorer</span>
+        </a>
+        <a
+          class="flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] active:scale-[0.98] transition-all duration-150"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="security">security</span>
+          <span class="font-body-sm text-body-sm font-medium">Security Posture</span>
+        </a>
+      </div>
+    </nav>
+    <!-- Main Content Wrapper -->
+    <div class="flex-1 md:ml-64 flex flex-col min-h-screen relative">
+      <!-- TopAppBar -->
+      <header
+        class="bg-slate-900 dark:bg-[#2E3440] font-inter antialiased tracking-tight w-full top-0 border-b border-slate-700 dark:border-[#434C5E] flex justify-between items-center px-6 h-16 sticky z-10"
+      >
+        <div class="flex items-center">
+          <span class="text-lg font-bold text-[#88C0D0] uppercase tracking-widest md:hidden"
+            >Homelab Cluster-01</span
+          >
+          <div
+            class="hidden md:flex items-center text-[#88C0D0] bg-surface-container-highest px-3 py-1.5 rounded-lg border border-outline-variant"
+          >
+            <span class="material-symbols-outlined mr-2 text-sm">search</span>
+            <input
+              class="bg-transparent border-none text-body-sm font-body-sm text-on-surface placeholder:text-outline focus:ring-0 w-64 p-0"
+              placeholder="Search logs, metrics, alerts..."
+              type="text"
+            />
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="md:hidden flex items-center text-[#88C0D0]">
+            <span
+              class="material-symbols-outlined cursor-pointer hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors p-2 rounded-full active:opacity-80"
+              >search</span
+            >
+          </div>
+          <span
+            class="material-symbols-outlined text-[#88C0D0] cursor-pointer hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors p-2 rounded-full active:opacity-80"
+            data-icon="dns"
+            >dns</span
+          >
+          <span
+            class="material-symbols-outlined text-[#88C0D0] cursor-pointer hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors p-2 rounded-full active:opacity-80"
+            data-icon="notifications_active"
+            >notifications_active</span
+          >
+          <span
+            class="material-symbols-outlined text-[#88C0D0] cursor-pointer hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors p-2 rounded-full active:opacity-80"
+            data-icon="settings"
+            >settings</span
+          >
+        </div>
+      </header>
+      <!-- Main Canvas -->
+      <main class="flex-1 p-margin space-y-lg overflow-y-auto bg-background">
+        <!-- Page Header -->
+        <div
+          class="flex flex-col md:flex-row md:items-end justify-between space-y-4 md:space-y-0 mb-8"
+        >
+          <div>
+            <h1 class="font-h1 text-h1 text-on-surface">Global Insight Hub</h1>
+            <p class="font-body-lg text-body-lg text-on-surface-variant mt-2">
+              Comprehensive AI-driven overview of cluster health and operations.
+            </p>
+          </div>
+          <div class="flex space-x-3">
+            <button
+              class="px-4 py-2 bg-transparent border border-secondary text-secondary rounded-lg font-data-label text-data-label uppercase hover:bg-secondary/10 transition-colors"
+            >
+              Generate Report
+            </button>
+            <button
+              class="px-4 py-2 bg-primary-container text-on-primary-container rounded-lg font-data-label text-data-label uppercase hover:bg-primary-container/90 transition-colors"
+            >
+              Acknowledge All
+            </button>
+          </div>
+        </div>
+        <!-- TL;DR Widget (Full Width) -->
+        <section
+          class="bg-[#3B4252] border border-[#434C5E] rounded-xl p-6 relative overflow-hidden"
+        >
+          <div class="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
+          <div class="flex items-center space-x-3 mb-4 border-b border-[#434C5E] pb-3">
+            <span
+              class="material-symbols-outlined text-primary-container"
+              style="font-variation-settings: &quot;FILL&quot; 1"
+              >auto_awesome</span
+            >
+            <h2 class="font-h2 text-h2 text-on-surface text-lg">AI Summary: Last 24 Hours</h2>
+          </div>
+          <div class="space-y-3 font-body-sm text-body-sm text-on-surface-variant">
+            <p>
+              The cluster maintained a stable state with a <strong>99.8%</strong> overall uptime.
+              FluxCD successfully reconciled 12 deployments, though
+              <span class="text-error">auth-service</span> experienced brief latency spikes at 03:00
+              UTC due to database backup locking.
+            </p>
+            <p>
+              Resource utilization remains optimal; however, predictable forecasting suggests
+              Node-Pool-Alpha will reach memory capacity limits in
+              <strong>approx. 48 hours</strong> if current ingestion rates continue.
+            </p>
+          </div>
+        </section>
+        <!-- Bento Grid Layout -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+          <!-- Cluster Health Score (Col Span 4) -->
+          <section
+            class="col-span-1 md:col-span-4 bg-[#3B4252] border border-[#434C5E] rounded-xl p-6 flex flex-col justify-between"
+          >
+            <div>
+              <div class="flex justify-between items-center mb-6">
+                <h3 class="font-data-label text-data-label uppercase text-on-surface-variant">
+                  Cluster Health Index
+                </h3>
+                <div
+                  class="flex items-center px-2 py-1 bg-[#A3BE8C]/10 rounded text-[#A3BE8C] font-data-label text-data-label"
+                >
+                  <span class="w-2 h-2 rounded-full bg-[#A3BE8C] mr-2"></span> Healthy
+                </div>
+              </div>
+              <div class="flex flex-col items-center justify-center my-6">
+                <div class="relative w-32 h-32 flex items-center justify-center">
+                  <!-- Simulated Donut Chart -->
+                  <svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+                    <path
+                      class="text-[#434C5E]"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                    ></path>
+                    <path
+                      class="text-[#88C0D0]"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-dasharray="92, 100"
+                      stroke-width="3"
+                    ></path>
+                  </svg>
+                  <div class="absolute flex flex-col items-center">
+                    <span class="font-h1 text-h1 text-primary-container leading-none">92</span>
+                    <span class="font-data-label text-data-label text-on-surface-variant mt-1"
+                      >/100</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-4 border-t border-[#434C5E] pt-4 mt-4">
+              <div class="flex justify-between items-center">
+                <span class="font-data-label text-data-label text-on-surface-variant">CPU</span>
+                <span class="font-data-display text-data-display text-on-surface">45%</span>
+              </div>
+              <div class="w-full bg-[#2E3440] rounded-full h-1.5">
+                <div class="bg-[#88C0D0] h-1.5 rounded-full" style="width: 45%"></div>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="font-data-label text-data-label text-on-surface-variant">RAM</span>
+                <span class="font-data-display text-data-display text-[#EBCB8B]">82%</span>
+              </div>
+              <div class="w-full bg-[#2E3440] rounded-full h-1.5">
+                <div class="bg-[#EBCB8B] h-1.5 rounded-full" style="width: 82%"></div>
+              </div>
+            </div>
+          </section>
+          <!-- Top AI-Detected Anomalies (Col Span 8) -->
+          <section
+            class="col-span-1 md:col-span-8 bg-[#3B4252] border border-[#434C5E] rounded-xl p-6 flex flex-col"
+          >
+            <div class="flex justify-between items-center mb-6 border-b border-[#434C5E] pb-3">
+              <div class="flex items-center space-x-2">
+                <span class="material-symbols-outlined text-outline">query_stats</span>
+                <h3 class="font-data-label text-data-label uppercase text-on-surface-variant">
+                  Top Detected Anomalies
+                </h3>
+              </div>
+              <button
+                class="text-primary-container hover:text-primary font-data-label text-data-label uppercase"
+              >
+                View All
+              </button>
+            </div>
+            <div class="flex-1 flex flex-col space-y-3">
+              <!-- Anomaly Item 1 -->
+              <div
+                class="bg-[#2E3440] p-4 rounded-lg flex items-start space-x-4 border border-[#434C5E]"
+              >
+                <div class="p-2 bg-error/10 rounded-md mt-1">
+                  <span class="material-symbols-outlined text-error text-sm">warning</span>
+                </div>
+                <div class="flex-1">
+                  <div class="flex justify-between items-start">
+                    <h4 class="font-body-sm text-body-sm font-medium text-on-surface">
+                      Unusual I/O Spikes in Persistent Volume
+                    </h4>
+                    <span class="font-data-display text-data-display text-outline text-xs"
+                      >15m ago</span
+                    >
+                  </div>
+                  <p class="font-code-block text-code-block text-on-surface-variant mt-1">
+                    pv-database-postgres-0
+                  </p>
+                  <div class="mt-3 flex items-center space-x-4">
+                    <span
+                      class="px-2 py-1 bg-surface-bright rounded text-xs font-data-display text-outline-variant"
+                      >Confidence: 94%</span
+                    >
+                    <button class="text-primary-container text-xs hover:underline">
+                      Inspect Logs
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <!-- Anomaly Item 2 -->
+              <div
+                class="bg-[#2E3440] p-4 rounded-lg flex items-start space-x-4 border border-[#434C5E]"
+              >
+                <div class="p-2 bg-[#EBCB8B]/10 rounded-md mt-1">
+                  <span class="material-symbols-outlined text-[#EBCB8B] text-sm">schedule</span>
+                </div>
+                <div class="flex-1">
+                  <div class="flex justify-between items-start">
+                    <h4 class="font-body-sm text-body-sm font-medium text-on-surface">
+                      Network Latency Deviation (Ingress)
+                    </h4>
+                    <span class="font-data-display text-data-display text-outline text-xs"
+                      >2h ago</span
+                    >
+                  </div>
+                  <p class="font-code-block text-code-block text-on-surface-variant mt-1">
+                    ingress-nginx-controller
+                  </p>
+                  <div class="mt-3 flex items-center space-x-4">
+                    <span
+                      class="px-2 py-1 bg-surface-bright rounded text-xs font-data-display text-outline-variant"
+                      >Confidence: 78%</span
+                    >
+                    <button class="text-primary-container text-xs hover:underline">
+                      View Trace
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <!-- Recent FluxCD Reconciliation (Col Span 12) -->
+          <section
+            class="col-span-1 md:col-span-12 bg-[#3B4252] border border-[#434C5E] rounded-xl p-6"
+          >
+            <div class="flex justify-between items-center mb-6 border-b border-[#434C5E] pb-3">
+              <div class="flex items-center space-x-2">
+                <span class="material-symbols-outlined text-outline">sync</span>
+                <h3 class="font-data-label text-data-label uppercase text-on-surface-variant">
+                  Recent FluxCD Reconciliation
+                </h3>
+              </div>
+              <span class="font-data-display text-data-display text-outline text-xs"
+                >Last sync: 2m ago</span
+              >
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-[#434C5E]">
+                    <th
+                      class="py-3 px-4 font-data-label text-data-label text-on-surface-variant uppercase font-medium"
+                    >
+                      Kustomization
+                    </th>
+                    <th
+                      class="py-3 px-4 font-data-label text-data-label text-on-surface-variant uppercase font-medium"
+                    >
+                      Status
+                    </th>
+                    <th
+                      class="py-3 px-4 font-data-label text-data-label text-on-surface-variant uppercase font-medium"
+                    >
+                      Message
+                    </th>
+                    <th
+                      class="py-3 px-4 font-data-label text-data-label text-on-surface-variant uppercase font-medium"
+                    >
+                      Duration
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="font-data-display text-data-display">
+                  <tr class="border-b border-[#3B4252] hover:bg-[#434C5E]/30 transition-colors">
+                    <td class="py-3 px-4 text-[#88C0D0]">infrastructure</td>
+                    <td class="py-3 px-4">
+                      <span
+                        class="inline-flex items-center px-2 py-1 bg-[#A3BE8C]/10 text-[#A3BE8C] rounded text-xs"
+                      >
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#A3BE8C] mr-1.5"></span> Ready
+                      </span>
+                    </td>
+                    <td class="py-3 px-4 text-outline font-code-block text-xs">
+                      Applied revision: main@sha1:a1b2c3d
+                    </td>
+                    <td class="py-3 px-4 text-outline">4.2s</td>
+                  </tr>
+                  <tr class="border-b border-[#3B4252] hover:bg-[#434C5E]/30 transition-colors">
+                    <td class="py-3 px-4 text-[#88C0D0]">monitoring-stack</td>
+                    <td class="py-3 px-4">
+                      <span
+                        class="inline-flex items-center px-2 py-1 bg-[#A3BE8C]/10 text-[#A3BE8C] rounded text-xs"
+                      >
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#A3BE8C] mr-1.5"></span> Ready
+                      </span>
+                    </td>
+                    <td class="py-3 px-4 text-outline font-code-block text-xs">
+                      Applied revision: main@sha1:e4f5g6h
+                    </td>
+                    <td class="py-3 px-4 text-outline">12.1s</td>
+                  </tr>
+                  <tr class="hover:bg-[#434C5E]/30 transition-colors relative">
+                    <td class="py-3 px-4 text-[#88C0D0]">auth-service</td>
+                    <td class="py-3 px-4">
+                      <span
+                        class="inline-flex items-center px-2 py-1 bg-[#EBCB8B]/10 text-[#EBCB8B] rounded text-xs"
+                      >
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#EBCB8B] mr-1.5"></span>
+                        Reconciling
+                      </span>
+                    </td>
+                    <td class="py-3 px-4 text-outline font-code-block text-xs">
+                      Waiting for deployment rollout...
+                    </td>
+                    <td class="py-3 px-4 text-outline">45s (ongoing)</td>
+                    <!-- Highlight for active/selected state conceptually -->
+                    <td class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GitOps &amp; Security Posture - Homelab Cluster-01</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#90bdbc",
+                        "surface-container-highest": "#2f3541",
+                        "on-tertiary-fixed": "#001c37",
+                        "surface-tint": "#97cfe0",
+                        "error-container": "#93000a",
+                        "on-tertiary-container": "#254a72",
+                        "on-secondary": "#023736",
+                        "secondary-fixed": "#bdebea",
+                        "inverse-primary": "#2b6674",
+                        "on-primary": "#003640",
+                        "surface-variant": "#2f3541",
+                        "surface-container-high": "#242a36",
+                        "primary-fixed": "#b3ecfc",
+                        "surface-container-lowest": "#080e19",
+                        "secondary-container": "#214e4d",
+                        "inverse-on-surface": "#2b313c",
+                        "inverse-surface": "#dde2f2",
+                        "on-error": "#690005",
+                        "on-surface": "#dde2f2",
+                        "outline-variant": "#40484b",
+                        "primary": "#a3dcec",
+                        "secondary": "#a1cfce",
+                        "on-primary-fixed-variant": "#094e5c",
+                        "background": "#0d131e",
+                        "primary-container": "#88c0d0",
+                        "surface-container-low": "#161c27",
+                        "surface-dim": "#0d131e",
+                        "surface": "#0d131e",
+                        "on-primary-container": "#0c4f5d",
+                        "tertiary-fixed": "#d2e4ff",
+                        "on-primary-fixed": "#001f26",
+                        "secondary-fixed-dim": "#a1cfce",
+                        "on-background": "#dde2f2",
+                        "tertiary-container": "#97bae8",
+                        "on-secondary-fixed-variant": "#214e4d",
+                        "surface-container": "#1a202b",
+                        "on-surface-variant": "#c0c8cb",
+                        "primary-fixed-dim": "#97cfe0",
+                        "on-tertiary-fixed-variant": "#234970",
+                        "surface-bright": "#333945",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary": "#033258",
+                        "error": "#ffb4ab",
+                        "outline": "#8a9295",
+                        "on-secondary-fixed": "#002020",
+                        "tertiary": "#b7d5ff",
+                        "tertiary-fixed-dim": "#a6c9f8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "xs": "4px",
+                        "xl": "40px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "gutter": "16px",
+                        "margin": "24px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "h2": ["Inter"],
+                        "code-block": ["JetBrains Mono"],
+                        "data-label": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h1": ["Inter"],
+                        "data-display": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "h2": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "code-block": ["13px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "data-label": ["12px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "body-lg": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "h1": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "data-display": ["14px", { "lineHeight": "1.4", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-sm text-body-sm antialiased h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-slate-900 dark:bg-[#3B4252] font-inter text-sm font-medium h-screen w-64 border-r border-slate-800 dark:border-[#434C5E] fixed left-0 top-0 flex flex-col pt-4 z-20 hidden md:flex">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center border border-primary-container/50">
+<span class="material-symbols-outlined text-primary-container text-sm" data-icon="trip_origin">trip_origin</span>
+</div>
+<div>
+<h2 class="text-xl font-black text-[#ECEFF4] font-h2 text-h2 leading-none mb-1">AI Insights</h2>
+<p class="text-slate-400 font-data-label text-data-label">SRE Arctic Node</p>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto w-full">
+<ul class="flex flex-col gap-1 w-full px-2">
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-DEFAULT text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+                        Insight Hub
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-DEFAULT text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+                        Forecasting
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-DEFAULT text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+                        Anomaly Explorer
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded-DEFAULT text-[#88C0D0] bg-[#434C5E]/50 border-l-2 border-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="security" style="font-variation-settings: 'FILL' 1;">security</span>
+                        Security Posture
+                    </a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col md:ml-64 h-screen relative">
+<!-- TopAppBar -->
+<header class="bg-slate-900 dark:bg-[#2E3440] font-inter antialiased tracking-tight full-width top-0 border-b border-slate-700 dark:border-[#434C5E] flex justify-between items-center w-full px-6 h-16 z-10 sticky">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-slate-400 hover:text-primary-container">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<span class="text-lg font-bold text-[#88C0D0] uppercase tracking-widest">Homelab Cluster-01</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" data-icon="search">search</span>
+<input class="bg-surface-container-high border-outline-variant rounded-DEFAULT text-on-surface font-body-sm text-body-sm pl-9 pr-4 py-1.5 focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none transition-colors w-64 placeholder-slate-500" placeholder="Search resources..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-400 dark:text-[#D8DEE9] hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors rounded-DEFAULT cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+</button>
+<button class="p-2 text-slate-400 dark:text-[#D8DEE9] hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors rounded-DEFAULT cursor-pointer active:opacity-80 relative">
+<span class="material-symbols-outlined" data-icon="notifications_active">notifications_active</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border border-surface"></span>
+</button>
+<button class="p-2 text-slate-400 dark:text-[#D8DEE9] hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors rounded-DEFAULT cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 overflow-y-auto p-margin bg-background">
+<div class="max-w-7xl mx-auto space-y-md">
+<!-- Header Section -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-lg border-b border-surface-container-high pb-4">
+<div>
+<h1 class="font-h1 text-h1 text-on-surface mb-2">GitOps &amp; Security Posture</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time integrity and secret management state across cluster layers.</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-DEFAULT bg-surface-container-high border border-outline-variant">
+<span class="w-2 h-2 rounded-full bg-[#A3BE8C]"></span>
+<span class="font-data-label text-data-label text-on-surface">CLUSTER SYNCED</span>
+</div>
+<button class="bg-primary-container text-on-primary-container px-4 py-2 rounded-DEFAULT font-body-sm text-body-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2 shadow-[0_0_10px_rgba(136,192,208,0.2)]">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+                            Force Reconcile
+                        </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- FluxCD Drift Detection (Span 8) -->
+<div class="md:col-span-8 bg-surface-container-highest border border-outline-variant rounded-lg p-md flex flex-col">
+<div class="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container" data-icon="compare_arrows">compare_arrows</span>
+<h2 class="font-h2 text-h2 text-on-surface text-[16px]">FluxCD Drift Detection</h2>
+</div>
+<span class="font-data-label text-data-label text-on-surface-variant">LAST CHECK: 2m ago</span>
+</div>
+<div class="grid grid-cols-3 gap-4 mb-4">
+<div class="bg-surface p-3 rounded-DEFAULT border border-outline-variant flex flex-col gap-1">
+<span class="font-data-label text-data-label text-on-surface-variant">KUSTOMIZATIONS</span>
+<div class="flex items-baseline gap-2">
+<span class="font-data-display text-data-display text-on-surface text-xl">42</span>
+<span class="font-data-label text-data-label text-[#A3BE8C]">Healthy</span>
+</div>
+</div>
+<div class="bg-surface p-3 rounded-DEFAULT border border-outline-variant flex flex-col gap-1 relative overflow-hidden">
+<div class="absolute inset-0 border-l-2 border-[#EBCB8B] bg-[#EBCB8B]/5"></div>
+<div class="relative z-10">
+<span class="font-data-label text-data-label text-on-surface-variant">HELM RELEASES</span>
+<div class="flex items-baseline gap-2">
+<span class="font-data-display text-data-display text-on-surface text-xl">18</span>
+<span class="font-data-label text-data-label text-[#EBCB8B]">1 Suspended</span>
+</div>
+</div>
+</div>
+<div class="bg-surface p-3 rounded-DEFAULT border border-outline-variant flex flex-col gap-1">
+<span class="font-data-label text-data-label text-on-surface-variant">SOURCES</span>
+<div class="flex items-baseline gap-2">
+<span class="font-data-display text-data-display text-on-surface text-xl">6</span>
+<span class="font-data-label text-data-label text-[#A3BE8C]">Synced</span>
+</div>
+</div>
+</div>
+<div class="flex-1 bg-surface border border-outline-variant rounded-DEFAULT overflow-hidden flex flex-col">
+<div class="bg-surface-container-high px-4 py-2 border-b border-outline-variant grid grid-cols-12 gap-2 font-data-label text-data-label text-on-surface-variant">
+<div class="col-span-4">RESOURCE</div>
+<div class="col-span-3">NAMESPACE</div>
+<div class="col-span-3">STATUS</div>
+<div class="col-span-2 text-right">AGE</div>
+</div>
+<div class="flex-1 overflow-y-auto">
+<div class="px-4 py-3 border-b border-outline-variant grid grid-cols-12 gap-2 font-code-block text-code-block text-on-surface items-center hover:bg-surface-container-high transition-colors">
+<div class="col-span-4 flex items-center gap-2 truncate">
+<div class="w-1 h-4 bg-[#A3BE8C] rounded-sm"></div>
+<span class="truncate">core-infrastructure</span>
+</div>
+<div class="col-span-3 text-on-surface-variant truncate">flux-system</div>
+<div class="col-span-3 flex items-center gap-1 text-[#A3BE8C]">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span>
+                                        Ready
+                                    </div>
+<div class="col-span-2 text-right text-on-surface-variant">4d</div>
+</div>
+<div class="px-4 py-3 border-b border-outline-variant grid grid-cols-12 gap-2 font-code-block text-code-block text-on-surface items-center hover:bg-surface-container-high transition-colors bg-surface-container-high/50">
+<div class="col-span-4 flex items-center gap-2 truncate">
+<div class="w-1 h-4 bg-[#EBCB8B] rounded-sm"></div>
+<span class="truncate">monitoring-stack</span>
+</div>
+<div class="col-span-3 text-on-surface-variant truncate">monitoring</div>
+<div class="col-span-3 flex items-center gap-1 text-[#EBCB8B]">
+<span class="material-symbols-outlined text-[14px]" data-icon="sync">sync</span>
+                                        Reconciling
+                                    </div>
+<div class="col-span-2 text-right text-on-surface-variant">12s</div>
+</div>
+<div class="px-4 py-3 grid grid-cols-12 gap-2 font-code-block text-code-block text-on-surface items-center hover:bg-surface-container-high transition-colors">
+<div class="col-span-4 flex items-center gap-2 truncate">
+<div class="w-1 h-4 bg-[#A3BE8C] rounded-sm"></div>
+<span class="truncate">ingress-nginx</span>
+</div>
+<div class="col-span-3 text-on-surface-variant truncate">ingress</div>
+<div class="col-span-3 flex items-center gap-1 text-[#A3BE8C]">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span>
+                                        Ready
+                                    </div>
+<div class="col-span-2 text-right text-on-surface-variant">14d</div>
+</div>
+</div>
+</div>
+</div>
+<!-- SOPS/External Secrets (Span 4) -->
+<div class="md:col-span-4 bg-surface-container-highest border border-outline-variant rounded-lg p-md flex flex-col">
+<div class="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container" data-icon="key">key</span>
+<h2 class="font-h2 text-h2 text-on-surface text-[16px]">Secret Stores</h2>
+</div>
+</div>
+<div class="space-y-4 flex-1">
+<div class="p-3 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col gap-2 relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-[#A3BE8C]"></div>
+<div class="flex justify-between items-start ml-2">
+<div>
+<h3 class="font-body-sm text-body-sm font-medium text-on-surface">SOPS Age Key</h3>
+<p class="font-data-label text-data-label text-on-surface-variant">flux-system / sops-age</p>
+</div>
+<span class="material-symbols-outlined text-[#A3BE8C]" data-icon="verified">verified</span>
+</div>
+<div class="ml-2 font-code-block text-code-block text-[11px] text-on-surface-variant bg-surface-container-high px-2 py-1 rounded-DEFAULT truncate">
+                                    age1h4r5z...m9vq2k
+                                </div>
+</div>
+<div class="p-3 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col gap-2 relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-[#A3BE8C]"></div>
+<div class="flex justify-between items-start ml-2">
+<div>
+<h3 class="font-body-sm text-body-sm font-medium text-on-surface">Vault ClusterStore</h3>
+<p class="font-data-label text-data-label text-on-surface-variant">external-secrets</p>
+</div>
+<div class="flex items-center gap-1 text-[#A3BE8C]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#A3BE8C]"></span>
+<span class="font-data-label text-data-label">Valid</span>
+</div>
+</div>
+<div class="ml-2 flex gap-2">
+<div class="flex-1 bg-surface-container-high px-2 py-1 rounded-DEFAULT flex justify-between items-center">
+<span class="font-data-label text-data-label text-on-surface-variant">SYNCED</span>
+<span class="font-code-block text-code-block text-on-surface">24/24</span>
+</div>
+</div>
+</div>
+<div class="p-3 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col gap-2 relative overflow-hidden opacity-70">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-outline-variant"></div>
+<div class="flex justify-between items-start ml-2">
+<div>
+<h3 class="font-body-sm text-body-sm font-medium text-on-surface">AWS Secrets Manager</h3>
+<p class="font-data-label text-data-label text-on-surface-variant">Not Configured</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="block">block</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Cert-manager Forecast (Span 6) -->
+<div class="md:col-span-6 bg-surface-container-highest border border-outline-variant rounded-lg p-md flex flex-col">
+<div class="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container" data-icon="workspace_premium">workspace_premium</span>
+<h2 class="font-h2 text-h2 text-on-surface text-[16px]">Certificate Expiration Forecast</h2>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-3">
+<div class="flex items-center justify-between p-2 hover:bg-surface rounded-DEFAULT transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#BF616A]/10 flex items-center justify-center border border-[#BF616A]/30">
+<span class="material-symbols-outlined text-[#BF616A] text-sm" data-icon="warning">warning</span>
+</div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">auth.homelab.local</div>
+<div class="font-data-label text-data-label text-on-surface-variant">Issuer: letsencrypt-prod</div>
+</div>
+</div>
+<div class="text-right">
+<div class="font-code-block text-code-block text-[#BF616A]">Exp: 4 days</div>
+<div class="font-data-label text-data-label text-on-surface-variant">Auto-renew failed</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 hover:bg-surface rounded-DEFAULT transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#EBCB8B]/10 flex items-center justify-center border border-[#EBCB8B]/30">
+<span class="material-symbols-outlined text-[#EBCB8B] text-sm" data-icon="schedule">schedule</span>
+</div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">api.homelab.local</div>
+<div class="font-data-label text-data-label text-on-surface-variant">Issuer: letsencrypt-prod</div>
+</div>
+</div>
+<div class="text-right">
+<div class="font-code-block text-code-block text-[#EBCB8B]">Exp: 14 days</div>
+<div class="font-data-label text-data-label text-on-surface-variant">Scheduled for renewal</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 hover:bg-surface rounded-DEFAULT transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#A3BE8C]/10 flex items-center justify-center border border-[#A3BE8C]/30">
+<span class="material-symbols-outlined text-[#A3BE8C] text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">dashboard.homelab.local</div>
+<div class="font-data-label text-data-label text-on-surface-variant">Issuer: vault-pki</div>
+</div>
+</div>
+<div class="text-right">
+<div class="font-code-block text-code-block text-on-surface">Exp: 89 days</div>
+<div class="font-data-label text-data-label text-on-surface-variant">Healthy</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Talos API Activity (Span 6) -->
+<div class="md:col-span-6 bg-surface-container-highest border border-outline-variant rounded-lg p-md flex flex-col">
+<div class="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container" data-icon="terminal">terminal</span>
+<h2 class="font-h2 text-h2 text-on-surface text-[16px]">Talos API Audit</h2>
+</div>
+<span class="px-2 py-0.5 rounded-DEFAULT bg-surface border border-outline-variant font-data-label text-data-label text-primary-container">v1.5.4</span>
+</div>
+<div class="bg-surface rounded-DEFAULT border border-outline-variant p-2 overflow-hidden flex-1 flex flex-col">
+<div class="flex items-center justify-between px-2 py-1 mb-2 border-b border-surface-container-high">
+<span class="font-data-label text-data-label text-on-surface-variant">Live Stream (Filtered: WRITE)</span>
+<div class="flex gap-1">
+<span class="w-2 h-2 rounded-full bg-[#A3BE8C] animate-pulse"></span>
+</div>
+</div>
+<div class="font-code-block text-code-block text-on-surface-variant flex-1 overflow-y-auto space-y-1">
+<div class="flex gap-3 hover:bg-surface-container-high px-1 rounded transition-colors">
+<span class="text-slate-500">10:42:15</span>
+<span class="text-[#88C0D0]">node-01</span>
+<span class="text-[#A3BE8C]">MachineConfigUpdate</span>
+<span class="truncate ml-auto text-slate-500 text-[11px]">admin@192.168.1.50</span>
+</div>
+<div class="flex gap-3 hover:bg-surface-container-high px-1 rounded transition-colors">
+<span class="text-slate-500">10:15:02</span>
+<span class="text-[#88C0D0]">node-03</span>
+<span class="text-[#A3BE8C]">ContainerdRestart</span>
+<span class="truncate ml-auto text-slate-500 text-[11px]">controller-manager</span>
+</div>
+<div class="flex gap-3 hover:bg-surface-container-high px-1 rounded transition-colors bg-[#BF616A]/10 border-l border-[#BF616A]">
+<span class="text-slate-500 ml-[-1px] pl-1">09:58:22</span>
+<span class="text-[#88C0D0]">node-02</span>
+<span class="text-[#BF616A]">UnauthorizedAccess</span>
+<span class="truncate ml-auto text-slate-500 text-[11px]">unknown@10.0.0.4</span>
+</div>
+<div class="flex gap-3 hover:bg-surface-container-high px-1 rounded transition-colors">
+<span class="text-slate-500">08:30:00</span>
+<span class="text-[#88C0D0]">cluster</span>
+<span class="text-[#A3BE8C]">KubeconfigRead</span>
+<span class="truncate ml-auto text-slate-500 text-[11px]">flux-system</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

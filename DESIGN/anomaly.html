@@ -1,0 +1,583 @@
+<!doctype html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Homelab AI Insights - Anomaly Explorer</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-container": "#90bdbc",
+              "surface-container-highest": "#2f3541",
+              "on-tertiary-fixed": "#001c37",
+              "surface-tint": "#97cfe0",
+              "error-container": "#93000a",
+              "on-tertiary-container": "#254a72",
+              "on-secondary": "#023736",
+              "secondary-fixed": "#bdebea",
+              "inverse-primary": "#2b6674",
+              "on-primary": "#003640",
+              "surface-variant": "#2f3541",
+              "surface-container-high": "#242a36",
+              "primary-fixed": "#b3ecfc",
+              "surface-container-lowest": "#080e19",
+              "secondary-container": "#214e4d",
+              "inverse-on-surface": "#2b313c",
+              "inverse-surface": "#dde2f2",
+              "on-error": "#690005",
+              "on-surface": "#dde2f2",
+              "outline-variant": "#40484b",
+              primary: "#a3dcec",
+              secondary: "#a1cfce",
+              "on-primary-fixed-variant": "#094e5c",
+              background: "#0d131e",
+              "primary-container": "#88c0d0",
+              "surface-container-low": "#161c27",
+              "surface-dim": "#0d131e",
+              surface: "#0d131e",
+              "on-primary-container": "#0c4f5d",
+              "tertiary-fixed": "#d2e4ff",
+              "on-primary-fixed": "#001f26",
+              "secondary-fixed-dim": "#a1cfce",
+              "on-background": "#dde2f2",
+              "tertiary-container": "#97bae8",
+              "on-secondary-fixed-variant": "#214e4d",
+              "surface-container": "#1a202b",
+              "on-surface-variant": "#c0c8cb",
+              "primary-fixed-dim": "#97cfe0",
+              "on-tertiary-fixed-variant": "#234970",
+              "surface-bright": "#333945",
+              "on-error-container": "#ffdad6",
+              "on-tertiary": "#033258",
+              error: "#ffb4ab",
+              outline: "#8a9295",
+              "on-secondary-fixed": "#002020",
+              tertiary: "#b7d5ff",
+              "tertiary-fixed-dim": "#a6c9f8",
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
+            spacing: {
+              md: "16px",
+              xs: "4px",
+              xl: "40px",
+              lg: "24px",
+              sm: "8px",
+              gutter: "16px",
+              margin: "24px",
+              base: "4px",
+            },
+            fontFamily: {
+              "body-sm": ["Inter"],
+              h2: ["Inter"],
+              "code-block": ["JetBrains Mono"],
+              "data-label": ["Inter"],
+              "body-lg": ["Inter"],
+              h1: ["Inter"],
+              "data-display": ["JetBrains Mono"],
+            },
+            fontSize: {
+              "body-sm": [
+                "14px",
+                {
+                  lineHeight: "1.5",
+                  fontWeight: "400",
+                },
+              ],
+              h2: [
+                "24px",
+                {
+                  lineHeight: "1.3",
+                  fontWeight: "600",
+                },
+              ],
+              "code-block": [
+                "13px",
+                {
+                  lineHeight: "1.6",
+                  fontWeight: "400",
+                },
+              ],
+              "data-label": [
+                "12px",
+                {
+                  lineHeight: "1.2",
+                  letterSpacing: "0.05em",
+                  fontWeight: "500",
+                },
+              ],
+              "body-lg": [
+                "16px",
+                {
+                  lineHeight: "1.5",
+                  fontWeight: "400",
+                },
+              ],
+              h1: [
+                "32px",
+                {
+                  lineHeight: "1.2",
+                  letterSpacing: "-0.02em",
+                  fontWeight: "600",
+                },
+              ],
+              "data-display": [
+                "14px",
+                {
+                  lineHeight: "1.4",
+                  fontWeight: "500",
+                },
+              ],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-background text-on-background font-body-sm text-body-sm min-h-screen flex">
+    <!-- SideNavBar -->
+    <nav
+      class="hidden md:flex bg-slate-900 dark:bg-[#3B4252] h-screen w-64 border-r border-slate-800 dark:border-[#434C5E] fixed left-0 top-0 flex-col pt-4 z-20"
+    >
+      <div class="px-6 pb-6 border-b border-slate-800 dark:border-[#434C5E] mb-4">
+        <h1
+          class="font-inter antialiased tracking-tight text-xl font-black text-[#ECEFF4] uppercase tracking-widest"
+        >
+          AI Insights
+        </h1>
+        <p class="font-data-label text-data-label text-slate-400 dark:text-[#E5E9F0] mt-xs">
+          SRE Arctic Node
+        </p>
+      </div>
+      <div class="flex-1 px-sm space-y-xs overflow-y-auto">
+        <a
+          class="flex items-center gap-sm px-md py-sm rounded text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98] font-inter text-sm font-medium"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="hub">hub</span>
+          <span>Insight Hub</span>
+        </a>
+        <a
+          class="flex items-center gap-sm px-md py-sm rounded text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98] font-inter text-sm font-medium"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+          <span>Forecasting</span>
+        </a>
+        <a
+          class="flex items-center gap-sm px-md py-sm rounded text-[#88C0D0] bg-[#434C5E]/50 border-l-2 border-[#88C0D0] transition-all duration-150 active:scale-[0.98] font-inter text-sm font-medium"
+          href="#"
+        >
+          <span
+            class="material-symbols-outlined"
+            data-icon="monitoring"
+            style="font-variation-settings: &quot;FILL&quot; 1"
+            >monitoring</span
+          >
+          <span>Anomaly Explorer</span>
+        </a>
+        <a
+          class="flex items-center gap-sm px-md py-sm rounded text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98] font-inter text-sm font-medium"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="security">security</span>
+          <span>Security Posture</span>
+        </a>
+      </div>
+    </nav>
+    <div class="flex-1 flex flex-col md:ml-64 min-w-0">
+      <!-- TopAppBar -->
+      <header
+        class="bg-slate-900 dark:bg-[#2E3440] flex justify-between items-center w-full px-6 h-16 border-b border-slate-700 dark:border-[#434C5E] sticky top-0 z-10"
+      >
+        <div class="flex items-center md:hidden">
+          <h1
+            class="font-inter antialiased tracking-tight text-lg font-bold text-[#88C0D0] uppercase tracking-widest"
+          >
+            Homelab Cluster-01
+          </h1>
+        </div>
+        <div class="hidden md:flex items-center flex-1 max-w-md ml-auto mr-lg">
+          <!-- Search -->
+          <div class="relative w-full">
+            <span
+              class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-slate-400 text-[18px]"
+              data-icon="search"
+              >search</span
+            >
+            <input
+              class="w-full bg-[#161c27] border border-outline-variant text-on-surface text-body-sm font-body-sm rounded pl-[32px] pr-sm py-sm focus:border-primary-container focus:ring-1 focus:ring-primary-container focus:outline-none transition-colors placeholder:text-slate-500"
+              placeholder="Search logs, metrics, alerts..."
+              type="text"
+            />
+          </div>
+        </div>
+        <div class="flex items-center gap-sm text-[#88C0D0]">
+          <button
+            class="p-sm rounded hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors cursor-pointer active:opacity-80"
+          >
+            <span class="material-symbols-outlined text-[20px]" data-icon="dns">dns</span>
+          </button>
+          <button
+            class="p-sm rounded hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors cursor-pointer active:opacity-80 relative"
+          >
+            <span class="material-symbols-outlined text-[20px]" data-icon="notifications_active"
+              >notifications_active</span
+            >
+            <span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
+          </button>
+          <button
+            class="p-sm rounded hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors cursor-pointer active:opacity-80"
+          >
+            <span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+          </button>
+        </div>
+      </header>
+      <!-- Main Content -->
+      <main class="flex-1 p-md md:p-margin overflow-x-hidden">
+        <div class="flex flex-col gap-lg">
+          <!-- Page Header -->
+          <div class="flex flex-col md:flex-row md:justify-between md:items-end gap-sm">
+            <div>
+              <h2 class="font-h1 text-h1 text-on-surface">Smart Anomaly Explorer</h2>
+              <p class="font-body-sm text-body-sm text-on-surface-variant mt-xs">
+                AI-driven correlation and root-cause analysis for cluster-wide events.
+              </p>
+            </div>
+            <div class="flex gap-sm">
+              <button
+                class="bg-surface-container-high border border-outline-variant text-on-surface px-md py-sm rounded font-body-sm text-body-sm hover:bg-surface-bright transition-colors flex items-center gap-xs"
+              >
+                <span class="material-symbols-outlined text-[16px]" data-icon="calendar_today"
+                  >calendar_today</span
+                >
+                Last 24 Hours
+              </button>
+              <button
+                class="bg-primary-container text-on-primary-container px-md py-sm rounded font-body-sm text-body-sm font-medium hover:bg-primary-fixed transition-colors shadow-[0_0_8px_rgba(136,192,208,0.2)]"
+              >
+                Export RCA Report
+              </button>
+            </div>
+          </div>
+          <!-- Main Layout Grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+            <!-- Left Column: Timeline & Charts -->
+            <div class="lg:col-span-8 flex flex-col gap-gutter">
+              <!-- Primary Chart: CPU/Memory with Annotations -->
+              <div class="bg-[#3B4252] border border-[#434C5E] rounded-lg p-md">
+                <div
+                  class="flex justify-between items-center mb-md pb-sm border-b border-[#434C5E]"
+                >
+                  <h3 class="font-h2 text-h2 text-on-surface text-[18px]">
+                    Resource Utilization vs Latency
+                  </h3>
+                  <div class="flex items-center gap-sm">
+                    <span
+                      class="flex items-center gap-xs font-data-label text-data-label text-on-surface-variant"
+                    >
+                      <span class="w-2 h-2 rounded-full bg-[#88C0D0]"></span> CPU Load
+                    </span>
+                    <span
+                      class="flex items-center gap-xs font-data-label text-data-label text-on-surface-variant"
+                    >
+                      <span class="w-2 h-2 rounded-full bg-[#BF616A]"></span> p99 Latency
+                    </span>
+                  </div>
+                </div>
+                <!-- Chart Area Placeholder -->
+                <div class="h-64 relative w-full border-b border-l border-[#4C566A] mb-sm">
+                  <!-- Grid Lines -->
+                  <div
+                    class="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20"
+                  >
+                    <div class="border-t border-[#D8DEE9] w-full"></div>
+                    <div class="border-t border-[#D8DEE9] w-full"></div>
+                    <div class="border-t border-[#D8DEE9] w-full"></div>
+                    <div class="border-t border-[#D8DEE9] w-full"></div>
+                  </div>
+                  <!-- Fake Chart Data (CSS representation) -->
+                  <!-- CPU Line -->
+                  <svg
+                    class="absolute inset-0 h-full w-full"
+                    preserveaspectratio="none"
+                    viewbox="0 0 100 100"
+                  >
+                    <polyline
+                      fill="none"
+                      points="0,80 20,75 40,85 50,20 60,15 80,70 100,80"
+                      stroke="#88C0D0"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></polyline>
+                  </svg>
+                  <!-- Latency Line -->
+                  <svg
+                    class="absolute inset-0 h-full w-full"
+                    preserveaspectratio="none"
+                    viewbox="0 0 100 100"
+                  >
+                    <polyline
+                      fill="none"
+                      points="0,90 20,88 40,92 50,10 60,5 80,85 100,90"
+                      stroke="#BF616A"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></polyline>
+                  </svg>
+                  <!-- AI Annotation Highlight -->
+                  <div
+                    class="absolute top-0 bottom-0 left-[45%] w-[20%] bg-[#BF616A]/10 border-l border-r border-[#BF616A]/30 flex flex-col justify-start items-center pt-xs"
+                  >
+                    <div
+                      class="bg-[#2E3440] border border-[#BF616A] text-[#D8DEE9] font-data-label text-[10px] px-xs py-[2px] rounded whitespace-nowrap shadow-md z-10"
+                    >
+                      <span
+                        class="material-symbols-outlined text-[10px] text-[#EBCB8B] align-middle mr-[2px]"
+                        data-icon="smart_toy"
+                        >smart_toy</span
+                      >Anomaly Detected
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="flex justify-between text-on-surface-variant font-data-label text-[10px]"
+                >
+                  <span>10:00</span>
+                  <span>11:00</span>
+                  <span>12:00</span>
+                  <span>13:00 (Incident)</span>
+                  <span>14:00</span>
+                </div>
+              </div>
+              <!-- Anomaly Timeline -->
+              <div class="bg-[#3B4252] border border-[#434C5E] rounded-lg p-md">
+                <h3
+                  class="font-h2 text-h2 text-on-surface text-[18px] mb-md pb-sm border-b border-[#434C5E]"
+                >
+                  Event Sequence
+                </h3>
+                <div class="relative pl-sm">
+                  <!-- Timeline Track -->
+                  <div class="absolute left-[15px] top-2 bottom-2 w-px bg-[#4C566A]"></div>
+                  <div class="space-y-md relative">
+                    <!-- Event 1 -->
+                    <div class="flex items-start gap-md">
+                      <div
+                        class="relative z-10 w-6 h-6 rounded-full bg-[#3B4252] border-2 border-[#A3BE8C] flex items-center justify-center shrink-0 mt-1"
+                      >
+                        <span
+                          class="material-symbols-outlined text-[12px] text-[#A3BE8C]"
+                          data-icon="commit"
+                          >commit</span
+                        >
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex justify-between items-baseline mb-xs">
+                          <span class="font-data-label text-data-label text-on-surface"
+                            >Commit Deployed to Production</span
+                          >
+                          <span class="font-data-label text-data-label text-on-surface-variant"
+                            >12:45:02</span
+                          >
+                        </div>
+                        <div
+                          class="bg-[#2E3440] p-sm rounded border border-[#434C5E] font-code-block text-code-block text-[#D8DEE9]"
+                        >
+                          <span class="text-[#8FBCBB]">auth-service</span>: update token validation
+                          logic (PR #492)
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Event 2 -->
+                    <div class="flex items-start gap-md">
+                      <div
+                        class="relative z-10 w-6 h-6 rounded-full bg-[#3B4252] border-2 border-[#EBCB8B] flex items-center justify-center shrink-0 mt-1"
+                      >
+                        <span
+                          class="material-symbols-outlined text-[12px] text-[#EBCB8B]"
+                          data-icon="warning"
+                          >warning</span
+                        >
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex justify-between items-baseline mb-xs">
+                          <span class="font-data-label text-data-label text-on-surface"
+                            >Cache Miss Rate Spike</span
+                          >
+                          <span class="font-data-label text-data-label text-on-surface-variant"
+                            >12:48:15</span
+                          >
+                        </div>
+                        <p class="font-body-sm text-body-sm text-on-surface-variant">
+                          Redis cluster reported 400% increase in misses for namespace `session:*`.
+                        </p>
+                      </div>
+                    </div>
+                    <!-- Event 3 (Critical) -->
+                    <div class="flex items-start gap-md">
+                      <div
+                        class="relative z-10 w-6 h-6 rounded-full bg-[#3B4252] border-2 border-[#BF616A] flex items-center justify-center shrink-0 mt-1"
+                      >
+                        <span
+                          class="material-symbols-outlined text-[12px] text-[#BF616A]"
+                          data-icon="error"
+                          >error</span
+                        >
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex justify-between items-baseline mb-xs">
+                          <span class="font-data-label text-data-label text-[#BF616A] font-bold"
+                            >Cascading Failure Initiated</span
+                          >
+                          <span class="font-data-label text-data-label text-on-surface-variant"
+                            >12:51:30</span
+                          >
+                        </div>
+                        <div class="bg-[#2E3440] p-sm rounded border border-[#BF616A]/50">
+                          <p class="font-body-sm text-body-sm text-on-surface-variant mb-xs">
+                            Database connections maxed out due to cache bypass.
+                          </p>
+                          <div
+                            class="font-code-block text-[12px] text-[#BF616A] bg-[#0d131e] p-xs rounded overflow-x-auto"
+                          >
+                            FATAL: remaining connection slots are reserved for non-replication
+                            superuser connections
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Right Column: AI RCA Assistant -->
+            <div class="lg:col-span-4 flex flex-col gap-gutter">
+              <div
+                class="bg-[#434C5E] border border-[#4C566A] rounded-lg shadow-lg flex-1 flex flex-col"
+              >
+                <div
+                  class="p-md border-b border-[#4C566A] flex items-center gap-sm bg-[#3B4252] rounded-t-lg"
+                >
+                  <span
+                    class="material-symbols-outlined text-[#EBCB8B] text-[24px]"
+                    data-icon="auto_awesome"
+                    >auto_awesome</span
+                  >
+                  <h3 class="font-h2 text-h2 text-on-surface text-[18px]">
+                    AI Root-Cause Assistant
+                  </h3>
+                </div>
+                <div class="p-md flex-1 overflow-y-auto space-y-md bg-[#2E3440]">
+                  <!-- AI Hypothesis -->
+                  <div class="bg-[#3B4252] border-l-2 border-[#88C0D0] p-sm rounded-r">
+                    <p
+                      class="font-data-label text-data-label text-[#88C0D0] uppercase mb-xs tracking-wider"
+                    >
+                      Primary Hypothesis
+                    </p>
+                    <p class="font-body-sm text-body-sm text-on-surface">
+                      The recent commit <code>PR #492</code> in <code>auth-service</code> altered
+                      the session key format. This caused existing cached sessions to become
+                      invalid, leading to a massive cache stampede against the primary database.
+                    </p>
+                  </div>
+                  <!-- Correlated Diff -->
+                  <div>
+                    <p class="font-data-label text-data-label text-on-surface-variant mb-xs">
+                      Correlated Code Change
+                    </p>
+                    <div
+                      class="bg-[#080e19] rounded border border-[#4C566A] font-code-block text-[12px] overflow-hidden"
+                    >
+                      <div
+                        class="bg-[#2E3440] px-sm py-1 border-b border-[#4C566A] text-[#8FBCBB] flex justify-between"
+                      >
+                        <span>auth/token.go</span>
+                        <span class="text-slate-500">@@ -45,3 +45,3 @@</span>
+                      </div>
+                      <div class="p-sm whitespace-pre overflow-x-auto text-[#D8DEE9]">
+                        <div class="text-[#BF616A] bg-[#BF616A]/10 w-full inline-block px-1">
+                          - cacheKey := fmt.Sprintf("session:%s", userID)
+                        </div>
+                        <div class="text-[#A3BE8C] bg-[#A3BE8C]/10 w-full inline-block px-1">
+                          + cacheKey := fmt.Sprintf("session:v2:%s:%s", tenant, userID)
+                        </div>
+                        <div class="text-slate-500">// Fetch from Redis...</div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Recommended Actions -->
+                  <div>
+                    <p class="font-data-label text-data-label text-on-surface-variant mb-sm">
+                      Recommended Actions
+                    </p>
+                    <div class="space-y-xs">
+                      <button
+                        class="w-full flex items-center justify-between p-sm bg-[#3B4252] border border-[#4C566A] rounded hover:border-[#88C0D0] transition-colors text-left group"
+                      >
+                        <span class="font-body-sm text-body-sm text-on-surface"
+                          >Revert PR #492</span
+                        >
+                        <span
+                          class="material-symbols-outlined text-[16px] text-[#88C0D0] opacity-0 group-hover:opacity-100 transition-opacity"
+                          data-icon="undo"
+                          >undo</span
+                        >
+                      </button>
+                      <button
+                        class="w-full flex items-center justify-between p-sm bg-[#3B4252] border border-[#4C566A] rounded hover:border-[#88C0D0] transition-colors text-left group"
+                      >
+                        <span class="font-body-sm text-body-sm text-on-surface"
+                          >Scale up DB Replicas</span
+                        >
+                        <span
+                          class="material-symbols-outlined text-[16px] text-[#88C0D0] opacity-0 group-hover:opacity-100 transition-opacity"
+                          data-icon="add_circle"
+                          >add_circle</span
+                        >
+                      </button>
+                      <button
+                        class="w-full flex items-center justify-between p-sm bg-[#3B4252] border border-[#4C566A] rounded hover:border-[#88C0D0] transition-colors text-left group"
+                      >
+                        <span class="font-body-sm text-body-sm text-on-surface"
+                          >View full trace in Jaeger</span
+                        >
+                        <span
+                          class="material-symbols-outlined text-[16px] text-[#88C0D0] opacity-0 group-hover:opacity-100 transition-opacity"
+                          data-icon="open_in_new"
+                          >open_in_new</span
+                        >
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

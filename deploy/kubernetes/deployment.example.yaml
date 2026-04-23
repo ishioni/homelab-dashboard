@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homelab-dashboard
+  namespace: ai
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: homelab-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: homelab-dashboard
+    spec:
+      serviceAccountName: homelab-dashboard
+      automountServiceAccountToken: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ghcr.io/example/homelab-dashboard:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: APP_NAME
+              value: Homelab Dashboard
+            - name: CLUSTER_NAME
+              value: Homelab Cluster
+            - name: PROMETHEUS_URL
+              value: http://thanos-query.monitor.svc.cluster.local:10902
+            - name: PROMETHEUS_TIMEOUT
+              value: 10s
+            - name: REFRESH_INTERVAL
+              value: 45s
+            - name: ENABLE_KUBERNETES
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homelab-dashboard
+  namespace: ai
+spec:
+  selector:
+    app.kubernetes.io/name: homelab-dashboard
+  ports:
+    - port: 80
+      targetPort: http
+      name: http

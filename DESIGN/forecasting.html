@@ -1,0 +1,527 @@
+<!doctype html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Predictive Performance &amp; Forecasting - Homelab AI Insights</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-container": "#90bdbc",
+              "surface-container-highest": "#2f3541",
+              "on-tertiary-fixed": "#001c37",
+              "surface-tint": "#97cfe0",
+              "error-container": "#93000a",
+              "on-tertiary-container": "#254a72",
+              "on-secondary": "#023736",
+              "secondary-fixed": "#bdebea",
+              "inverse-primary": "#2b6674",
+              "on-primary": "#003640",
+              "surface-variant": "#2f3541",
+              "surface-container-high": "#242a36",
+              "primary-fixed": "#b3ecfc",
+              "surface-container-lowest": "#080e19",
+              "secondary-container": "#214e4d",
+              "inverse-on-surface": "#2b313c",
+              "inverse-surface": "#dde2f2",
+              "on-error": "#690005",
+              "on-surface": "#dde2f2",
+              "outline-variant": "#40484b",
+              primary: "#a3dcec",
+              secondary: "#a1cfce",
+              "on-primary-fixed-variant": "#094e5c",
+              background: "#0d131e",
+              "primary-container": "#88c0d0",
+              "surface-container-low": "#161c27",
+              "surface-dim": "#0d131e",
+              surface: "#0d131e",
+              "on-primary-container": "#0c4f5d",
+              "tertiary-fixed": "#d2e4ff",
+              "on-primary-fixed": "#001f26",
+              "secondary-fixed-dim": "#a1cfce",
+              "on-background": "#dde2f2",
+              "tertiary-container": "#97bae8",
+              "on-secondary-fixed-variant": "#214e4d",
+              "surface-container": "#1a202b",
+              "on-surface-variant": "#c0c8cb",
+              "primary-fixed-dim": "#97cfe0",
+              "on-tertiary-fixed-variant": "#234970",
+              "surface-bright": "#333945",
+              "on-error-container": "#ffdad6",
+              "on-tertiary": "#033258",
+              error: "#ffb4ab",
+              outline: "#8a9295",
+              "on-secondary-fixed": "#002020",
+              tertiary: "#b7d5ff",
+              "tertiary-fixed-dim": "#a6c9f8",
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
+            spacing: {
+              md: "16px",
+              xs: "4px",
+              xl: "40px",
+              lg: "24px",
+              sm: "8px",
+              gutter: "16px",
+              margin: "24px",
+              base: "4px",
+            },
+            fontFamily: {
+              "body-sm": ["Inter"],
+              h2: ["Inter"],
+              "code-block": ["JetBrains Mono"],
+              "data-label": ["Inter"],
+              "body-lg": ["Inter"],
+              h1: ["Inter"],
+              "data-display": ["JetBrains Mono"],
+            },
+            fontSize: {
+              "body-sm": ["14px", {lineHeight: "1.5", fontWeight: "400"}],
+              h2: ["24px", {lineHeight: "1.3", fontWeight: "600"}],
+              "code-block": ["13px", {lineHeight: "1.6", fontWeight: "400"}],
+              "data-label": [
+                "12px",
+                {lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "500"},
+              ],
+              "body-lg": ["16px", {lineHeight: "1.5", fontWeight: "400"}],
+              h1: ["32px", {lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600"}],
+              "data-display": ["14px", {lineHeight: "1.4", fontWeight: "500"}],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-background text-on-background font-body-sm text-body-sm min-h-screen flex">
+    <!-- SideNavBar -->
+    <nav
+      class="bg-slate-900 dark:bg-[#3B4252] font-inter text-sm font-medium h-screen w-64 border-r border-slate-800 dark:border-[#434C5E] fixed left-0 top-0 flex flex-col pt-4 z-20 hidden md:flex"
+    >
+      <div class="px-6 mb-8">
+        <h1 class="text-xl font-black text-[#ECEFF4] tracking-tight">AI Insights</h1>
+        <p class="text-xs text-slate-400 mt-1">SRE Arctic Node</p>
+      </div>
+      <div class="flex-1 flex flex-col gap-1 px-3">
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="hub">hub</span>
+          <span>Insight Hub</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-[#88C0D0] bg-[#434C5E]/50 border-l-2 border-[#88C0D0] transition-all duration-150 active:scale-[0.98]"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+          <span>Forecasting</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+          <span>Anomaly Explorer</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-slate-400 dark:text-[#E5E9F0] hover:text-[#88C0D0] hover:bg-[#434C5E] transition-all duration-150 active:scale-[0.98]"
+          href="#"
+        >
+          <span class="material-symbols-outlined" data-icon="security">security</span>
+          <span>Security Posture</span>
+        </a>
+      </div>
+      <div class="p-6 mt-auto">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container"
+          >
+            <span class="material-symbols-outlined text-sm">person</span>
+          </div>
+          <div>
+            <p class="text-sm font-medium">Admin User</p>
+            <p class="text-xs text-slate-400">Cluster Status Indicator</p>
+          </div>
+        </div>
+      </div>
+    </nav>
+    <!-- Main Content -->
+    <main class="flex-1 md:ml-64 flex flex-col min-h-screen">
+      <!-- TopAppBar -->
+      <header
+        class="bg-slate-900 dark:bg-[#2E3440] font-inter antialiased tracking-tight docked full-width top-0 border-b border-slate-700 dark:border-[#434C5E] flex justify-between items-center w-full px-6 h-16 sticky z-10"
+      >
+        <div class="flex items-center gap-4">
+          <span class="text-lg font-bold text-[#88C0D0] uppercase tracking-widest md:hidden"
+            >Homelab Cluster-01</span
+          >
+          <span
+            class="text-lg font-bold text-[#88C0D0] uppercase tracking-widest hidden md:inline-block"
+            >Homelab Cluster-01</span
+          >
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="relative hidden md:block">
+            <input
+              class="bg-[#3B4252] border border-[#434C5E] text-on-surface rounded-DEFAULT px-4 py-1.5 pl-10 text-sm focus:outline-none focus:border-[#88C0D0] focus:ring-1 focus:ring-[#88C0D0]/20 w-64"
+              placeholder="Search resources..."
+              type="text"
+            />
+            <span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-[18px]"
+              >search</span
+            >
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              class="p-2 text-slate-400 dark:text-[#D8DEE9] hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors rounded-DEFAULT cursor-pointer active:opacity-80"
+            >
+              <span class="material-symbols-outlined" data-icon="dns">dns</span>
+            </button>
+            <button
+              class="p-2 text-slate-400 dark:text-[#D8DEE9] hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors rounded-DEFAULT cursor-pointer active:opacity-80 relative"
+            >
+              <span class="material-symbols-outlined" data-icon="notifications_active"
+                >notifications_active</span
+              >
+              <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+            </button>
+            <button
+              class="p-2 text-slate-400 dark:text-[#D8DEE9] hover:bg-slate-800 dark:hover:bg-[#3B4252] transition-colors rounded-DEFAULT cursor-pointer active:opacity-80"
+            >
+              <span class="material-symbols-outlined" data-icon="settings">settings</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <!-- Canvas -->
+      <div class="flex-1 p-lg bg-surface-dim overflow-y-auto">
+        <div class="mb-lg flex justify-between items-end">
+          <div>
+            <h2 class="font-h1 text-h1 text-on-surface mb-xs">Predictive Performance</h2>
+            <p class="font-body-lg text-body-lg text-on-surface-variant">
+              Capacity planning and traffic trend forecasting for the next 30 days.
+            </p>
+          </div>
+          <div class="flex gap-sm">
+            <button
+              class="px-4 py-2 border border-outline-variant text-on-surface rounded-DEFAULT font-body-sm text-body-sm hover:bg-surface-bright transition-colors flex items-center gap-2"
+            >
+              <span class="material-symbols-outlined text-[18px]">calendar_month</span>
+              Last 30 Days
+            </button>
+            <button
+              class="px-4 py-2 bg-primary-container text-on-primary-container rounded-DEFAULT font-body-sm text-body-sm hover:opacity-90 transition-opacity flex items-center gap-2"
+            >
+              <span class="material-symbols-outlined text-[18px]">download</span>
+              Export Report
+            </button>
+          </div>
+        </div>
+        <!-- Bento Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-md">
+          <!-- TrueNAS Storage Runway (Large Chart) -->
+          <div
+            class="md:col-span-8 bg-surface-variant border border-outline-variant rounded-lg p-md flex flex-col relative overflow-hidden"
+          >
+            <div
+              class="flex justify-between items-start mb-md z-10 border-b border-surface-bright pb-sm"
+            >
+              <div>
+                <h3 class="font-h2 text-h2 text-on-surface">Storage Runway</h3>
+                <p class="font-data-label text-data-label text-on-surface-variant mt-1">
+                  TrueNAS (iSCSI/NFS) Pool Depletion Forecast
+                </p>
+              </div>
+              <div
+                class="flex items-center gap-2 bg-surface-bright px-3 py-1 rounded-DEFAULT border border-outline-variant"
+              >
+                <span class="w-2 h-2 rounded-full bg-error"></span>
+                <span class="font-data-label text-data-label text-error"
+                  >Warning: 45 Days Remaining</span
+                >
+              </div>
+            </div>
+            <div
+              class="flex-1 flex items-end gap-1 mt-4 relative h-[250px] z-10 border-b border-l border-outline-variant pl-2 pb-2"
+            >
+              <!-- Y-Axis Labels -->
+              <div
+                class="absolute left-[-30px] top-0 bottom-0 flex flex-col justify-between text-[10px] text-on-surface-variant font-data-display py-2"
+              >
+                <span>100%</span>
+                <span>75%</span>
+                <span>50%</span>
+                <span>25%</span>
+                <span>0%</span>
+              </div>
+              <!-- X-Axis Labels -->
+              <div
+                class="absolute bottom-[-20px] left-2 right-0 flex justify-between text-[10px] text-on-surface-variant font-data-display"
+              >
+                <span>Today</span>
+                <span>+15 Days</span>
+                <span>+30 Days</span>
+                <span>+45 Days</span>
+                <span>+60 Days</span>
+              </div>
+              <!-- Historical Data (Solid) -->
+              <div
+                class="w-1/5 h-[65%] bg-primary-container/20 border-t-2 border-primary-container relative group"
+              >
+                <div
+                  class="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-surface-container-highest border border-outline-variant px-2 py-1 rounded text-xs hidden group-hover:block whitespace-nowrap z-20 font-data-display text-primary"
+                >
+                  65% Used
+                </div>
+              </div>
+              <div
+                class="w-1/5 h-[70%] bg-primary-container/20 border-t-2 border-primary-container relative group"
+              >
+                <div
+                  class="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-surface-container-highest border border-outline-variant px-2 py-1 rounded text-xs hidden group-hover:block whitespace-nowrap z-20 font-data-display text-primary"
+                >
+                  70% Used
+                </div>
+              </div>
+              <!-- Predicted Data (Dashed) -->
+              <div
+                class="w-1/5 h-[80%] bg-secondary-container/20 border-t-2 border-dashed border-secondary-container relative group"
+              >
+                <div
+                  class="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-surface-container-highest border border-outline-variant px-2 py-1 rounded text-xs hidden group-hover:block whitespace-nowrap z-20 font-data-display text-secondary"
+                >
+                  80% Predicted
+                </div>
+              </div>
+              <div
+                class="w-1/5 h-[92%] bg-error-container/20 border-t-2 border-dashed border-error relative group"
+              >
+                <div
+                  class="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-surface-container-highest border border-outline-variant px-2 py-1 rounded text-xs hidden group-hover:block whitespace-nowrap z-20 font-data-display text-error"
+                >
+                  92% Predicted
+                </div>
+              </div>
+              <div
+                class="w-1/5 h-[100%] bg-error/10 border-t-2 border-dashed border-error relative flex items-start justify-center pt-2"
+              >
+                <span
+                  class="text-error font-data-label text-[10px] bg-surface-variant px-1 rounded border border-error"
+                  >FULL</span
+                >
+              </div>
+              <!-- Threshold Line -->
+              <div
+                class="absolute top-[10%] left-0 right-0 border-t border-dashed border-error opacity-50 pointer-events-none"
+              ></div>
+            </div>
+          </div>
+          <!-- Resource Optimization (List) -->
+          <div
+            class="md:col-span-4 bg-surface-variant border border-outline-variant rounded-lg p-md flex flex-col"
+          >
+            <div
+              class="flex justify-between items-start mb-md border-b border-surface-bright pb-sm"
+            >
+              <div>
+                <h3 class="font-h2 text-h2 text-on-surface">Optimization Suggestions</h3>
+                <p class="font-data-label text-data-label text-on-surface-variant mt-1">
+                  Actionable insights to reclaim capacity
+                </p>
+              </div>
+              <span class="material-symbols-outlined text-primary-container">lightbulb</span>
+            </div>
+            <div class="flex flex-col gap-sm flex-1 overflow-y-auto pr-2">
+              <!-- Suggestion Item -->
+              <div
+                class="bg-surface-container p-sm rounded-DEFAULT border border-outline-variant flex gap-3 hover:bg-surface-bright transition-colors cursor-pointer group"
+              >
+                <div
+                  class="w-8 h-8 rounded bg-surface-container-high border border-outline flex items-center justify-center text-on-surface mt-1 group-hover:border-primary transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[16px]">folder_delete</span>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-body-sm text-body-sm text-on-surface font-medium">
+                    Orphaned Snapshots
+                  </h4>
+                  <p class="font-data-label text-[11px] text-on-surface-variant mt-0.5">
+                    TrueNAS Pool-01 contains 42 snapshots older than 90 days.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2">
+                    <span class="text-xs font-data-display text-primary">Reclaim: ~250GB</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Suggestion Item -->
+              <div
+                class="bg-surface-container p-sm rounded-DEFAULT border border-outline-variant flex gap-3 hover:bg-surface-bright transition-colors cursor-pointer group"
+              >
+                <div
+                  class="w-8 h-8 rounded bg-surface-container-high border border-outline flex items-center justify-center text-on-surface mt-1 group-hover:border-primary transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[16px]">compress</span>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-body-sm text-body-sm text-on-surface font-medium">
+                    Enable ZSTD Compression
+                  </h4>
+                  <p class="font-data-label text-[11px] text-on-surface-variant mt-0.5">
+                    Dataset 'app-logs' is currently uncompressed.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2">
+                    <span class="text-xs font-data-display text-primary">Est. Saving: ~15%</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Suggestion Item -->
+              <div
+                class="bg-surface-container p-sm rounded-DEFAULT border border-outline-variant flex gap-3 hover:bg-surface-bright transition-colors cursor-pointer group"
+              >
+                <div
+                  class="w-8 h-8 rounded bg-surface-container-high border border-outline flex items-center justify-center text-on-surface mt-1 group-hover:border-primary transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[16px]">memory</span>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-body-sm text-body-sm text-on-surface font-medium">
+                    Underutilized VMs
+                  </h4>
+                  <p class="font-data-label text-[11px] text-on-surface-variant mt-0.5">
+                    3 VMs have CPU usage &lt; 5% over 14 days.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2">
+                    <span class="text-xs font-data-display text-primary"
+                      >Downsize Reccommended</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Traffic Trends (Envoy) -->
+          <div
+            class="md:col-span-12 bg-surface-variant border border-outline-variant rounded-lg p-md"
+          >
+            <div
+              class="flex justify-between items-start mb-md border-b border-surface-bright pb-sm"
+            >
+              <div>
+                <h3 class="font-h2 text-h2 text-on-surface">Traffic Trend Analysis</h3>
+                <p class="font-data-label text-data-label text-on-surface-variant mt-1">
+                  Envoy Gateway Ingress Metrics (Requests/sec)
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <span
+                  class="flex items-center gap-1 text-[11px] font-data-display text-on-surface-variant"
+                  ><span class="w-2 h-2 bg-primary-container rounded-sm"></span> Historical</span
+                >
+                <span
+                  class="flex items-center gap-1 text-[11px] font-data-display text-on-surface-variant"
+                  ><span
+                    class="w-2 h-2 bg-secondary-container rounded-sm border border-secondary-container border-dashed"
+                  ></span>
+                  Predicted Seasonal</span
+                >
+              </div>
+            </div>
+            <div
+              class="h-[200px] w-full relative flex items-end gap-[1px] border-b border-l border-outline-variant pl-2 pb-2"
+            >
+              <!-- Y-Axis -->
+              <div
+                class="absolute left-[-35px] top-0 bottom-0 flex flex-col justify-between text-[10px] text-on-surface-variant font-data-display py-2"
+              >
+                <span>10k</span>
+                <span>7.5k</span>
+                <span>5k</span>
+                <span>2.5k</span>
+                <span>0</span>
+              </div>
+              <!-- Simple bar visualization for trend -->
+              <!-- Historical -->
+              <div
+                class="flex-1 h-[30%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[40%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[35%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[50%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[45%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[60%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[55%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[70%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[65%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[80%] bg-primary-container/30 border-t border-primary-container hover:bg-primary-container/50 transition-colors"
+              ></div>
+              <!-- Predicted Seasonal Spike -->
+              <div
+                class="flex-1 h-[85%] bg-secondary-container/20 border-t border-dashed border-secondary-container relative group hover:bg-secondary-container/40 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[95%] bg-secondary-container/20 border-t border-dashed border-secondary-container relative group hover:bg-secondary-container/40 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[100%] bg-error-container/30 border-t border-error relative group hover:bg-error-container/50 transition-colors"
+              >
+                <div
+                  class="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-surface-container-highest border border-error px-2 py-0.5 rounded text-[10px] font-data-display text-error whitespace-nowrap z-20"
+                >
+                  Anomaly Expected
+                </div>
+              </div>
+              <div
+                class="flex-1 h-[90%] bg-secondary-container/20 border-t border-dashed border-secondary-container relative group hover:bg-secondary-container/40 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[75%] bg-secondary-container/20 border-t border-dashed border-secondary-container relative group hover:bg-secondary-container/40 transition-colors"
+              ></div>
+              <div
+                class="flex-1 h-[60%] bg-secondary-container/20 border-t border-dashed border-secondary-container relative group hover:bg-secondary-container/40 transition-colors"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+.DS_Store
+.idea/
+.vscode/
+bin/
+dist/
+coverage.out
+node_modules/
+untitled folder/
+/homelab-dashboard

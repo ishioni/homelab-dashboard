@@ -1,0 +1,118 @@
+package web
+
+import (
+	"context"
+	"embed"
+	"html/template"
+	"io/fs"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"homelab-dashboard/internal/config"
+	"homelab-dashboard/internal/dashboard"
+)
+
+//go:embed templates/*.gohtml static/*
+var assets embed.FS
+
+type dashboardService interface {
+	Hub(context.Context) dashboard.ViewModel
+	Security(context.Context) dashboard.ViewModel
+	Anomalies(context.Context) dashboard.ViewModel
+	Forecast(context.Context) dashboard.ViewModel
+}
+
+type Server struct {
+	cfg       config.Config
+	service   dashboardService
+	templates *template.Template
+	staticFS  http.Handler
+}
+
+func NewServer(cfg config.Config, service dashboardService) *Server {
+	funcs := template.FuncMap{
+		"ago": func(value time.Time) string {
+			if value.IsZero() {
+				return "n/a"
+			}
+			diff := time.Since(value).Round(time.Minute)
+			if diff < time.Minute {
+				return "just now"
+			}
+			return diff.String() + " ago"
+		},
+		"meterWidth": func(value float64) string {
+			if value < 0 {
+				value = 0
+			}
+			if value > 100 {
+				value = 100
+			}
+			return strings.TrimSpace(strings.TrimRight(strings.TrimRight(
+				strconv.FormatFloat(value, 'f', 1, 64), "0"), ".")) + "%"
+		},
+	}
+
+	tmpl := template.Must(template.New("page.gohtml").Funcs(funcs).ParseFS(assets, "templates/*.gohtml"))
+	staticRoot := mustSubFS(assets, "static")
+
+	return &Server{
+		cfg:       cfg,
+		service:   service,
+		templates: tmpl,
+		staticFS:  http.FileServer(http.FS(staticRoot)),
+	}
+}
+
+func (s *Server) Routes() http.Handler {
+	mux := http.NewServeMux()
+
+	mux.Handle("/static/", http.StripPrefix("/static/", s.staticFS))
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("/", s.wrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Hub(ctx)
+	}))
+	mux.HandleFunc("/security", s.wrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Security(ctx)
+	}))
+	mux.HandleFunc("/anomalies", s.wrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Anomalies(ctx)
+	}))
+	mux.HandleFunc("/forecasting", s.wrap(func(ctx context.Context) dashboard.ViewModel {
+		return s.service.Forecast(ctx)
+	}))
+
+	return mux
+}
+
+func (s *Server) wrap(load func(context.Context) dashboard.ViewModel) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "/security" && r.URL.Path != "/anomalies" && r.URL.Path != "/forecasting" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), s.cfg.PrometheusTimeout)
+		defer cancel()
+
+		model := load(ctx)
+		if err := s.templates.ExecuteTemplate(w, "page", model); err != nil {
+			log.Printf("template render failed: %v", err)
+			http.Error(w, "template render failed", http.StatusInternalServerError)
+		}
+	}
+}
+
+func mustSubFS(root fs.FS, path string) fs.FS {
+	sub, err := fs.Sub(root, path)
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}
