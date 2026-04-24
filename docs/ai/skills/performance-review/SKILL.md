@@ -39,60 +39,84 @@ Find the actual bottleneck, support the conclusion with measurements where possi
 
 ## Workflow
 
-1. Establish the symptom.
-2. Identify the affected path, feature, or operation.
-3. Measure before changing code.
-4. Inspect the hot path and supporting dependencies.
-5. Propose the smallest defensible fix.
-6. Re-measure after the change.
-7. Report evidence, tradeoffs, and residual risks.
+1. Establish the symptom, complaint, or regression concern.
+2. Identify the affected request path, refresh loop, polling path, or operation.
+3. Check whether there is enough signal to proceed.
+4. If the request is too vague, ask for the slow path, user-visible symptom, suspected regression, or performance goal before analyzing further.
+5. Measure or inspect the hot path before suggesting fixes.
+6. Separate measured facts from inference and identify the most likely bottleneck.
+7. Propose the smallest focused fixes, with expected benefit, tradeoffs, and clear verification steps.
+8. Only implement changes if the user explicitly asks after reviewing the findings.
+9. If changes are made, re-measure and report before/after results.
 
 ## Measurement First
 
-Prefer evidence such as:
+Prefer direct evidence such as:
 - request latency before and after
 - `go test -bench` results
 - `-benchmem` allocation data
 - `pprof` CPU or heap profiles
 - counts of external calls per request
+- concrete timing, allocation, or query-count comparisons
 
-Avoid presenting guesses as facts. If you cannot measure directly, say what you inferred, why, and how confident you are.
+When measurement is possible, prefer it over intuition.
+
+External observability is valid evidence when available. If the environment exposes Prometheus, tracing, ingress or gateway metrics, load balancer metrics, or service-level latency and error data through MCPs or other tools, use those signals to confirm the user-visible symptom and narrow the hot path before proposing fixes.
+
+When direct measurement is not practical:
+- inspect the hot path carefully
+- identify the repeated work, remote call fan-out, allocation pressure, or contention risk
+- state clearly that the conclusion is based on inspection rather than measurement
+- separate measured facts, observed code behavior, and inference
+
+Do not assume any specific metric, dashboard, or controller exists. Use the observability available in the current environment.
+
+Do not present guesses as facts.
 
 ## Repo-Specific Focus
 
 For `homelab-dashboard`, check these first:
-- Prometheus query count, latency, and duplicated fetches
-- Kubernetes API calls in request paths
-- repeated data shaping before template rendering
-- unnecessary polling or refresh fan-out
-- string building, JSON marshalling, and allocation-heavy transforms
-- lock contention or shared client bottlenecks
+- Prometheus query count, latency, duplicated fetches, and page-specific fan-out
+- Kubernetes API calls that happen in request or refresh paths instead of being reduced, filtered, or reused
+- repeated data shaping, sorting, formatting, or aggregation before template rendering
+- polling and refresh behavior that amplifies backend load or repeats the same work too often
+- page assembly work that fetches or computes the same data separately for hub, security, anomaly, or forecasting views
+- string building, JSON marshalling, and other allocation-heavy transforms in hot paths
+- shared clients, synchronization, or contention that can serialize otherwise independent work
 
 ## Review Heuristics
 
 When reviewing code, prefer findings that materially affect user-visible performance:
-- repeated remote calls that could be batched, cached, or reused
-- N+1 style loops over Prometheus or Kubernetes data
-- work repeated on every request that could be moved or memoized safely
-- large temporary allocations in hot paths
-- expensive formatting, sorting, or parsing done too often
+- repeated remote calls that could be batched, reduced, cached, or reused safely
+- N+1 style loops over Prometheus, Kubernetes, or page assembly data
+- work repeated on every request, refresh cycle, or polling interval that could be reduced or reused
+- allocation-heavy transforms or repeated creation of large temporary slices, maps, or buffers in hot paths
+- expensive formatting, sorting, parsing, or aggregation done more often than necessary
+- serial work that could dominate latency because independent operations are forced through one path
+
+Prefer findings with a clear path to verification, such as lower latency, fewer remote calls, fewer allocations, or less repeated work.
 
 Ignore cosmetic micro-optimizations unless they sit on a proven hot path.
 
 ## Change Discipline
 
-- Do not optimize blindly.
-- Keep behavior unchanged unless the user asked for a functional tradeoff.
-- Prefer simple fixes over clever ones.
-- If caching is introduced, document invalidation and staleness tradeoffs.
-- If concurrency is introduced, explain why it is safe and worth the added complexity.
+- Do not optimize blindly or propose changes without a clear bottleneck or symptom.
+- Prefer the smallest fix that addresses the measured or strongly supported problem.
+- Keep behavior unchanged unless the user explicitly accepts a functional tradeoff.
+- Prefer simple changes over clever ones, especially in hot paths that are already hard to reason about.
+- Do not recommend caching without explaining invalidation, staleness, and why simpler reuse is not enough.
+- Do not recommend concurrency without explaining why the work is independent, what latency it improves, and what new complexity it introduces.
+- Avoid broad refactors framed as performance work unless the existing structure is itself the bottleneck.
+- If implementation is requested, verify the effect after the change rather than assuming the proposal helped.
 
 ## Output Expectations
 
 A good performance review should include:
-- the observed symptom
-- the measured or suspected bottleneck
-- the code path involved
-- the recommended or implemented fix
-- before/after evidence when available
-- any remaining uncertainty or follow-up work
+- the observed symptom, complaint, or regression concern
+- the affected code path, request path, refresh loop, polling path, or operation
+- the measured evidence, or a clear statement that the conclusion is based on inspection rather than direct measurement
+- the most likely bottleneck, with measured facts separated from inference
+- the proposed fixes, ordered from smallest to most invasive when there is more than one reasonable option
+- the expected benefit, tradeoffs, and verification steps for each proposed fix
+- before and after evidence if changes were implemented
+- any remaining uncertainty, missing measurements, or follow-up work
