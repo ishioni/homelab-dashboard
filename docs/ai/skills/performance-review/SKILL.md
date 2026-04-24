@@ -31,7 +31,6 @@ Find the actual bottleneck, support the conclusion with measurements where possi
 - If the request is too vague, ask for the slow path, user-visible symptom, suspected regression, or performance goal before proceeding.
 - Diagnose the bottleneck first and propose focused fixes before making code changes.
 - Do not implement performance changes unless the user explicitly asks for them after reviewing the findings.
-- Prefer the smallest change that addresses the measured bottleneck.
 - Do not introduce caching, concurrency, or broad refactors unless the evidence justifies the added complexity.
 - Keep behavior unchanged unless the user explicitly accepts a tradeoff.
 - If direct measurement is not possible, state that clearly and separate observation, inference, and recommendation.
@@ -61,7 +60,8 @@ Prefer direct evidence such as:
 
 When measurement is possible, prefer it over intuition.
 
-External observability is valid evidence when available. If the environment exposes Prometheus, tracing, ingress or gateway metrics, load balancer metrics, or service-level latency and error data through MCPs or other tools, use those signals to confirm the user-visible symptom and narrow the hot path before proposing fixes.
+External observability is valid evidence when available.
+If the environment exposes Prometheus, tracing, ingress or gateway metrics, load balancer metrics, or service-level latency and error data through MCPs or other tools, use those signals to confirm the user-visible symptom and narrow the hot path before proposing fixes.
 
 When direct measurement is not practical:
 - inspect the hot path carefully
@@ -111,7 +111,7 @@ Ignore cosmetic micro-optimizations unless they sit on a proven hot path.
 
 ## Output Expectations
 
-A good performance review should include:
+A good performance review should present findings before fixes and include:
 - the observed symptom, complaint, or regression concern
 - the affected code path, request path, refresh loop, polling path, or operation
 - the measured evidence, or a clear statement that the conclusion is based on inspection rather than direct measurement
