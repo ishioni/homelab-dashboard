@@ -34,6 +34,11 @@ type Server struct {
 	staticFS  http.Handler
 }
 
+type pageView struct {
+	dashboard.ViewModel
+	BodyHTML template.HTML
+}
+
 func NewServer(cfg config.Config, service dashboardService) *Server {
 	funcs := template.FuncMap{
 		"ago": func(value time.Time) string {
@@ -46,6 +51,12 @@ func NewServer(cfg config.Config, service dashboardService) *Server {
 			}
 			return diff.String() + " ago"
 		},
+		"ts": func(value time.Time) string {
+			if value.IsZero() {
+				return ""
+			}
+			return value.UTC().Format(time.RFC3339)
+		},
 		"meterWidth": func(value float64) string {
 			if value < 0 {
 				value = 0
@@ -55,6 +66,30 @@ func NewServer(cfg config.Config, service dashboardService) *Server {
 			}
 			return strings.TrimSpace(strings.TrimRight(strings.TrimRight(
 				strconv.FormatFloat(value, 'f', 1, 64), "0"), ".")) + "%"
+		},
+		"anomalyIcon": func(severity string) string {
+			switch severity {
+			case "critical":
+				return "error"
+			case "warning":
+				return "warning"
+			default:
+				return "commit"
+			}
+		},
+		"timelineIcon": func(label string) string {
+			switch strings.ToLower(strings.TrimSpace(label)) {
+			case "compute":
+				return "memory"
+			case "network":
+				return "route"
+			case "storage":
+				return "database"
+			case "operators":
+				return "settings_suggest"
+			default:
+				return "monitoring"
+			}
 		},
 	}
 
@@ -116,7 +151,19 @@ func (s *Server) wrap(load func(context.Context) dashboard.ViewModel) http.Handl
 		defer cancel()
 
 		model := load(ctx)
-		if err := s.templates.ExecuteTemplate(w, "page", model); err != nil {
+		bodyHTML, err := s.renderBody(model)
+		if err != nil {
+			log.Printf("content render failed: %v", err)
+			http.Error(w, "content render failed", http.StatusInternalServerError)
+			return
+		}
+
+		view := pageView{
+			ViewModel: model,
+			BodyHTML:  template.HTML(bodyHTML),
+		}
+
+		if err := s.templates.ExecuteTemplate(w, "page", view); err != nil {
 			log.Printf("template render failed: %v", err)
 			http.Error(w, "template render failed", http.StatusInternalServerError)
 		}
@@ -136,7 +183,7 @@ func (s *Server) apiWrap(load func(context.Context) dashboard.ViewModel) http.Ha
 			return
 		}
 
-		bodyHTML, err := s.renderPartial("content", model)
+		bodyHTML, err := s.renderBody(model)
 		if err != nil {
 			log.Printf("content partial render failed: %v", err)
 			http.Error(w, "content render failed", http.StatusInternalServerError)
@@ -158,12 +205,31 @@ func (s *Server) apiWrap(load func(context.Context) dashboard.ViewModel) http.Ha
 	}
 }
 
+func (s *Server) renderBody(model dashboard.ViewModel) (string, error) {
+	return s.renderPartial(bodyTemplateName(model.Screen), model)
+}
+
 func (s *Server) renderPartial(name string, model dashboard.ViewModel) (string, error) {
 	var buf bytes.Buffer
 	if err := s.templates.ExecuteTemplate(&buf, name, model); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func bodyTemplateName(screen string) string {
+	switch screen {
+	case "hub":
+		return "hub_body"
+	case "security":
+		return "security_body"
+	case "anomalies":
+		return "anomalies_body"
+	case "forecasting":
+		return "forecasting_body"
+	default:
+		return "hub_body"
+	}
 }
 
 func mustSubFS(root fs.FS, path string) fs.FS {

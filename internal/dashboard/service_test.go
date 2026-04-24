@@ -70,9 +70,9 @@ func TestBuildSparkline(t *testing.T) {
 
 func TestSeverityHelpers(t *testing.T) {
 	signals := []AnomalySignal{
-		{Severity: "critical"},
-		{Severity: "warning"},
-		{Severity: "critical"},
+		{Category: "Compute", Severity: "critical", Resource: "a"},
+		{Category: "Network", Severity: "warning", Resource: "b"},
+		{Category: "Compute", Severity: "critical", Resource: "c"},
 	}
 
 	if got := countSeverity(signals, "critical"); got != 2 {
@@ -85,6 +85,14 @@ func TestSeverityHelpers(t *testing.T) {
 
 	if got := anomalyBannerTone(signals); got != "critical" {
 		t.Fatalf("unexpected anomaly banner tone: %q", got)
+	}
+
+	if got := countDistinctCategories(signals); got != 2 {
+		t.Fatalf("expected 2 distinct categories, got %d", got)
+	}
+
+	if got := countDistinctResources(signals); got != 3 {
+		t.Fatalf("expected 3 distinct resources, got %d", got)
 	}
 }
 
@@ -106,5 +114,8 @@ func TestLoadSharedDemoMode(t *testing.T) {
 	}
 	if data.fluxTotal == 0 || len(data.anomalies) == 0 {
 		t.Fatal("expected populated demo data")
+	}
+	if len(data.computeSignalTrend) == 0 || len(data.operatorSignalTrend) == 0 {
+		t.Fatal("expected demo anomaly trend data to be populated")
 	}
 }

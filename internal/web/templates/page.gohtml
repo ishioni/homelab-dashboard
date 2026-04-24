@@ -7,7 +7,7 @@
     <title>{{ .PageTitle }} · {{ .ClusterName }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet" />
     <link href="/static/styles.css" rel="stylesheet" />
   </head>
@@ -38,12 +38,9 @@
 
       <main class="main">
         <header class="topbar">
-          <div>
-            <div class="eyebrow">{{ .ClusterName }}</div>
-            <h1>{{ .PageTitle }}</h1>
-          </div>
+          <div class="topbar-cluster">{{ .ClusterName }}</div>
           <div class="topbar-tools">
-            <button class="button button-secondary" id="refresh-view" type="button">Refresh</button>
+            <button class="button button-secondary topbar-refresh" id="refresh-view" type="button">Refresh</button>
             <div class="topbar-meta" id="page-topbar-meta">
               {{ template "topbar_meta" . }}
             </div>
@@ -51,7 +48,7 @@
         </header>
 
         <div id="page-body">
-          {{ template "content" . }}
+          {{ .BodyHTML }}
         </div>
       </main>
     </div>
@@ -64,7 +61,36 @@
         const refreshButton = document.getElementById("refresh-view");
         const header = document.getElementById("page-topbar-meta");
         const pageBody = document.getElementById("page-body");
+        let refreshTimer = null;
+        let nextRefreshAt = Date.now() + (refreshSeconds * 1000);
         let refreshInFlight = false;
+
+        function updateRefreshCountdown() {
+          const refreshCountdown = document.getElementById("refresh-countdown");
+          if (!refreshCountdown) {
+            return;
+          }
+
+          if (refreshInFlight) {
+            refreshCountdown.textContent = "Refreshing…";
+            return;
+          }
+
+          const remainingMs = Math.max(0, nextRefreshAt - Date.now());
+          const remainingSeconds = Math.ceil(remainingMs / 1000);
+          refreshCountdown.textContent = `Next refresh in ${remainingSeconds}s`;
+        }
+
+        function scheduleNextRefresh() {
+          if (refreshTimer) {
+            window.clearTimeout(refreshTimer);
+          }
+          nextRefreshAt = Date.now() + (refreshSeconds * 1000);
+          updateRefreshCountdown();
+          refreshTimer = window.setTimeout(function () {
+            refreshView(false);
+          }, refreshSeconds * 1000);
+        }
 
         async function refreshView(manual) {
           if (refreshInFlight) {
@@ -72,9 +98,10 @@
           }
 
           refreshInFlight = true;
+          updateRefreshCountdown();
           if (manual && refreshButton) {
             refreshButton.disabled = true;
-            refreshButton.textContent = "Refreshing...";
+            refreshButton.textContent = "Refreshing…";
           }
 
           try {
@@ -92,10 +119,12 @@
             console.error(error);
           } finally {
             refreshInFlight = false;
+            scheduleNextRefresh();
             if (refreshButton) {
               refreshButton.disabled = false;
               refreshButton.textContent = "Refresh";
             }
+            updateRefreshCountdown();
           }
         }
 
@@ -105,9 +134,8 @@
           });
         }
 
-        window.setInterval(function () {
-          refreshView(false);
-        }, refreshSeconds * 1000);
+        window.setInterval(updateRefreshCountdown, 1000);
+        scheduleNextRefresh();
       }());
     </script>
   </body>
@@ -115,283 +143,34 @@
 {{ end }}
 
 {{ define "topbar_meta" }}
-<div class="chip tone-{{ .Banner.Tone }}">
-  <span class="dot"></span>
-  <span>{{ .Banner.Label }}</span>
-</div>
-<div class="generated-at">Updated {{ ago .GeneratedAt }}</div>
+<div class="generated-at" id="refresh-countdown">Next refresh in {{ .RefreshSeconds }}s</div>
 {{ end }}
 
-{{ define "content" }}
-        <section class="banner tone-{{ .Banner.Tone }}">
-          <div>
-            <div class="banner-label">{{ .Banner.Label }}</div>
-            <p class="banner-detail">{{ .Banner.Detail }}</p>
-          </div>
-          <div class="banner-actions">
-            {{ range .Banner.Actions }}
-            <a class="button" href="{{ .Path }}">{{ .Label }}</a>
-            {{ end }}
-          </div>
-        </section>
+{{ define "page_common" }}
+<section class="page-header">
+  <div class="page-header-copy">
+    <h1 class="page-title">{{ .PageTitle }}</h1>
+  </div>
+  <div class="page-header-actions">
+    {{ range $index, $action := .Banner.Actions }}
+    <a class="button {{ if eq $index 0 }}button-secondary{{ end }}" href="{{ $action.Path }}">{{ $action.Label }}</a>
+    {{ end }}
+  </div>
+</section>
 
-        {{ if .DemoMode }}
-        <section class="demo-box">
-          <div class="demo-box-title">DEMO MODE</div>
-          <div class="demo-box-detail">This dashboard is rendering synthetic sample data for local demos and design review.</div>
-        </section>
-        {{ end }}
+{{ if .DemoMode }}
+<section class="demo-box">
+  <div class="demo-box-title">DEMO MODE</div>
+  <div class="demo-box-detail">This dashboard is rendering synthetic sample data for local demos and design review.</div>
+</section>
+{{ end }}
 
-        {{ if .Errors }}
-        <section class="errors">
-          <div class="section-title">Backend notes</div>
-          {{ range .Errors }}
-          <div class="error-row">{{ . }}</div>
-          {{ end }}
-        </section>
-        {{ end }}
-
-        {{ if eq .Screen "hub" }}
-        <section class="panel">
-          <div class="section-title">Cluster summary</div>
-          <div class="headline-grid">
-            {{ range .Hub.Headlines }}
-            <div class="headline-card">{{ . }}</div>
-            {{ end }}
-          </div>
-          <div class="card-grid">
-            {{ range .Hub.SummaryCards }}
-            <article class="metric-card tone-{{ .Tone }}">
-              <div class="metric-label">{{ .Label }}</div>
-              <div class="metric-value">{{ .Value }}</div>
-              <div class="metric-detail">{{ .Detail }}</div>
-            </article>
-            {{ end }}
-          </div>
-        </section>
-
-        <section class="two-column">
-          <article class="panel">
-            <div class="section-title">Capacity view</div>
-            {{ range .Hub.Utilization }}
-            <div class="meter">
-              <div class="meter-head">
-                <span>{{ .Label }}</span>
-                <span class="meter-value">{{ .Display }}</span>
-              </div>
-              <div class="meter-track">
-                <div class="meter-fill tone-{{ .Tone }}" style="width: {{ meterWidth .Value }}"></div>
-              </div>
-              <div class="meter-detail">{{ .Detail }}</div>
-            </div>
-            {{ end }}
-          </article>
-
-          <article class="panel">
-            <div class="section-title">Recent warning events</div>
-            {{ if .Hub.WarningEvents }}
-            <div class="table">
-              {{ range .Hub.WarningEvents }}
-              <div class="table-row">
-                <div>
-                  <div class="row-title">{{ .Reason }} · {{ .Object }}</div>
-                  <div class="row-detail">{{ .Namespace }} · {{ .Message }}</div>
-                </div>
-                <div class="row-meta">{{ ago .When }}</div>
-              </div>
-              {{ end }}
-            </div>
-            {{ else }}
-            <div class="empty">No warning events available from the Kubernetes API.</div>
-            {{ end }}
-          </article>
-        </section>
-
-        <section class="two-column">
-          <article class="panel">
-            <div class="section-title">Top CPU nodes</div>
-            <div class="table">
-              {{ range .Hub.TopCPU }}
-              <div class="table-row">
-                <div>
-                  <div class="row-title">{{ .Name }}</div>
-                  <div class="row-detail">{{ .Detail }}</div>
-                </div>
-                <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
-              </div>
-              {{ end }}
-            </div>
-          </article>
-          <article class="panel">
-            <div class="section-title">Top memory nodes</div>
-            <div class="table">
-              {{ range .Hub.TopMemory }}
-              <div class="table-row">
-                <div>
-                  <div class="row-title">{{ .Name }}</div>
-                  <div class="row-detail">{{ .Detail }}</div>
-                </div>
-                <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
-              </div>
-              {{ end }}
-            </div>
-          </article>
-        </section>
-        {{ end }}
-
-        {{ if eq .Screen "security" }}
-        <section class="panel">
-          <div class="section-title">Flux posture</div>
-          <div class="card-grid">
-            {{ range .Security.FluxCards }}
-            <article class="metric-card tone-{{ .Tone }}">
-              <div class="metric-label">{{ .Label }}</div>
-              <div class="metric-value">{{ .Value }}</div>
-              <div class="metric-detail">{{ .Detail }}</div>
-            </article>
-            {{ end }}
-          </div>
-        </section>
-
-        <section class="two-column">
-          <article class="panel">
-            <div class="section-title">Flux resources by kind</div>
-            <div class="table">
-              {{ range .Security.FluxKinds }}
-              <div class="table-row flux-kind-row">
-                <div>
-                  <div class="row-title">{{ .Kind }}</div>
-                  <div class="row-detail">{{ .Ready }} ready · {{ .NotReady }} not ready · {{ .Suspended }} suspended</div>
-                </div>
-                <div class="kind-bars">
-                  <span class="tiny-chip tone-good">{{ .Ready }}</span>
-                  <span class="tiny-chip tone-warning">{{ .NotReady }}</span>
-                  <span class="tiny-chip tone-info">{{ .Suspended }}</span>
-                </div>
-              </div>
-              {{ end }}
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="section-title">Slowest reconciliations</div>
-            <div class="table">
-              {{ range .Security.SlowReconciles }}
-              <div class="table-row">
-                <div>
-                  <div class="row-title">{{ .Name }}</div>
-                  <div class="row-detail">{{ .Detail }}</div>
-                </div>
-                <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
-              </div>
-              {{ end }}
-            </div>
-          </article>
-        </section>
-
-        <section class="panel">
-          <div class="section-title">Latest warning events</div>
-          {{ if .Security.WarningEvents }}
-          <div class="table">
-            {{ range .Security.WarningEvents }}
-            <div class="table-row">
-              <div>
-                <div class="row-title">{{ .Reason }} · {{ .Object }}</div>
-                <div class="row-detail">{{ .Namespace }} · {{ .Message }}</div>
-              </div>
-              <div class="row-meta">{{ ago .When }}</div>
-            </div>
-            {{ end }}
-          </div>
-          {{ else }}
-          <div class="empty">No warning events available from the Kubernetes API.</div>
-          {{ end }}
-        </section>
-        {{ end }}
-
-        {{ if eq .Screen "anomalies" }}
-        <section class="panel">
-          <div class="section-title">Signal summary</div>
-          <div class="card-grid">
-            {{ range .Anomalies.SummaryCards }}
-            <article class="metric-card tone-{{ .Tone }}">
-              <div class="metric-label">{{ .Label }}</div>
-              <div class="metric-value">{{ .Value }}</div>
-              <div class="metric-detail">{{ .Detail }}</div>
-            </article>
-            {{ end }}
-          </div>
-        </section>
-
-        <section class="two-column">
-          <article class="panel">
-            <div class="section-title">Active anomaly signals</div>
-            {{ if .Anomalies.Signals }}
-            <div class="table">
-              {{ range .Anomalies.Signals }}
-              <div class="table-row anomaly-row">
-                <div>
-                  <div class="row-title">{{ .Signal }} · {{ .Resource }}</div>
-                  <div class="row-detail">{{ .Details }}</div>
-                </div>
-                <div class="anomaly-meta">
-                  <div class="pill tone-{{ .Severity }}">{{ .Value }}</div>
-                  <div class="row-meta">{{ .Window }}</div>
-                </div>
-              </div>
-              {{ end }}
-            </div>
-            {{ else }}
-            <div class="empty">No current anomalies crossed the configured thresholds.</div>
-            {{ end }}
-          </article>
-
-          <article class="panel">
-            <div class="section-title">Node pressure map</div>
-            {{ range .Anomalies.NodePressure }}
-            <div class="meter">
-              <div class="meter-head">
-                <span>{{ .Label }}</span>
-                <span class="meter-value">{{ .Display }}</span>
-              </div>
-              <div class="meter-track">
-                <div class="meter-fill tone-{{ .Tone }}" style="width: {{ meterWidth .Value }}"></div>
-              </div>
-              <div class="meter-detail">{{ .Detail }}</div>
-            </div>
-            {{ end }}
-          </article>
-        </section>
-        {{ end }}
-
-        {{ if eq .Screen "forecasting" }}
-        <section class="panel">
-          <div class="section-title">24-hour projection</div>
-          <div class="card-grid">
-            {{ range .Forecast.ForecastCards }}
-            <article class="metric-card tone-{{ .Tone }}">
-              <div class="metric-label">{{ .Label }}</div>
-              <div class="metric-value">{{ .Projection }}</div>
-              <div class="metric-detail">{{ .Current }} now · {{ .Trend }}</div>
-            </article>
-            {{ end }}
-          </div>
-        </section>
-
-        <section class="three-column">
-          {{ range .Forecast.Series }}
-          <article class="panel sparkline-panel">
-            <div class="section-title">{{ .Label }}</div>
-            <svg class="sparkline" viewBox="0 0 180 56" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}">
-              <path d="{{ .Path }}"></path>
-            </svg>
-            <div class="sparkline-meta">
-              <div class="sparkline-value">{{ .Latest }}</div>
-              <div class="pill tone-{{ .Tone }}">{{ .Delta }}</div>
-            </div>
-            <div class="metric-detail">{{ .Detail }}</div>
-          </article>
-          {{ end }}
-        </section>
-        {{ end }}
+{{ if .Errors }}
+<section class="errors">
+  <div class="section-title">Backend notes</div>
+  {{ range .Errors }}
+  <div class="error-row">{{ . }}</div>
+  {{ end }}
+</section>
+{{ end }}
 {{ end }}
