@@ -11,9 +11,6 @@ metadata:
 rules:
   - apiGroups: [""]
     resources:
-      - namespaces
-      - nodes
-      - pods
       - events
     verbs: ["get", "list", "watch"]
   - apiGroups: ["kustomize.toolkit.fluxcd.io"]
@@ -36,7 +33,6 @@ rules:
   - apiGroups: ["external-secrets.io"]
     resources:
       - externalsecrets
-      - secretstores
       - clustersecretstores
     verbs: ["get", "list", "watch"]
 ---
