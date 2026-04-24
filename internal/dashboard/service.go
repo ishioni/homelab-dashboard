@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"homelab-dashboard/internal/buildinfo"
@@ -20,20 +21,75 @@ type Service struct {
 	cfg  config.Config
 	prom *prom.Client
 	kube *kube.Client
+
+	snapshotMu sync.RWMutex
+	snapshots  map[string]*snapshotState
 }
 
 func NewService(cfg config.Config, promClient *prom.Client, kubeClient *kube.Client) *Service {
-	return &Service{
+	service := &Service{
 		cfg:  cfg,
 		prom: promClient,
 		kube: kubeClient,
+		snapshots: map[string]*snapshotState{
+			"hub":         {},
+			"security":    {},
+			"anomalies":   {},
+			"forecasting": {},
+		},
+	}
+
+	if !cfg.DemoMode {
+		go service.runSnapshotRefresh()
+	}
+
+	return service
+}
+
+type sharedSnapshot struct {
+	data        sharedData
+	errors      []string
+	generatedAt time.Time
+}
+
+type snapshotState struct {
+	snapshot  sharedSnapshot
+	loaded    bool
+	refreshCh chan struct{}
+}
+
+func (s *Service) runSnapshotRefresh() {
+	s.refreshSnapshotNow("hub")
+
+	ticker := time.NewTicker(s.cfg.RefreshInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		for _, screen := range []string{"hub", "security", "anomalies", "forecasting"} {
+			s.snapshotMu.RLock()
+			state := s.snapshots[screen]
+			loaded := state.loaded
+			refreshing := state.refreshCh != nil
+			s.snapshotMu.RUnlock()
+			if !loaded || refreshing {
+				continue
+			}
+			s.refreshSnapshotNow(screen)
+		}
 	}
 }
 
+func (s *Service) refreshSnapshotNow(screen string) {
+	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.PrometheusTimeout)
+	defer cancel()
+
+	_, _ = s.refreshSnapshot(ctx, screen)
+}
+
 func (s *Service) Hub(ctx context.Context) ViewModel {
-	data, errors := s.loadShared(ctx)
-	headlines := buildHeadlines(data)
-	healthScore := buildClusterHealthIndex(data)
+	snapshot := s.loadShared(ctx, "hub")
+	headlines := buildHeadlines(snapshot.data)
+	healthScore := buildClusterHealthIndex(snapshot.data)
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
@@ -42,37 +98,37 @@ func (s *Service) Hub(ctx context.Context) ViewModel {
 		PageTitle:      "Insight Hub",
 		Screen:         "hub",
 		DemoMode:       s.cfg.DemoMode,
-		GeneratedAt:    time.Now(),
+		GeneratedAt:    snapshot.generatedAt,
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("hub"),
-		Errors:         errors,
+		Errors:         snapshot.errors,
 		Hub: &HubView{
 			Headlines: headlines,
 			SummaryCards: []StatCard{
-				{Label: "Nodes Ready", Value: fmt.Sprintf("%d / %d", int(data.nodesReady), int(data.nodesTotal)), Detail: "kubernetes node condition", Tone: toneByRatio(data.nodesReady, data.nodesTotal)},
-				{Label: "GitOps", Value: fmt.Sprintf("%.0f", data.fluxTotal), Detail: fmt.Sprintf("%.0f unready · %.0f suspended", data.fluxNotReady, data.fluxSuspended), Tone: toneByIssueCounts(data.fluxNotReady, data.fluxSuspended)},
-				{Label: "Secret Sync", Value: fmt.Sprintf("%.0f ready", data.externalSecretsReady), Detail: fmt.Sprintf("%.0f degraded · %.0f sync errors/24h", data.externalSecretsDegraded, data.externalSecretSyncErrors24h), Tone: toneByIssueCounts(data.externalSecretsDegraded, data.externalSecretSyncErrors24h)},
-				{Label: "Backup Integrity", Value: fmt.Sprintf("%.0f protected", data.volsyncSources), Detail: fmt.Sprintf("%.0f drifted · %.0f missed/24h", data.volsyncOutOfSync, data.volsyncMissed24h), Tone: toneByIssueCounts(data.volsyncOutOfSync, data.volsyncMissed24h)},
+				{Label: "Nodes Ready", Value: fmt.Sprintf("%d / %d", int(snapshot.data.nodesReady), int(snapshot.data.nodesTotal)), Detail: "kubernetes node condition", Tone: toneByRatio(snapshot.data.nodesReady, snapshot.data.nodesTotal)},
+				{Label: "GitOps", Value: fmt.Sprintf("%.0f", snapshot.data.fluxTotal), Detail: fmt.Sprintf("%.0f unready · %.0f suspended", snapshot.data.fluxNotReady, snapshot.data.fluxSuspended), Tone: toneByIssueCounts(snapshot.data.fluxNotReady, snapshot.data.fluxSuspended)},
+				{Label: "Secret Sync", Value: fmt.Sprintf("%.0f ready", snapshot.data.externalSecretsReady), Detail: fmt.Sprintf("%.0f degraded · %.0f sync errors/24h", snapshot.data.externalSecretsDegraded, snapshot.data.externalSecretSyncErrors24h), Tone: toneByIssueCounts(snapshot.data.externalSecretsDegraded, snapshot.data.externalSecretSyncErrors24h)},
+				{Label: "Backup Integrity", Value: fmt.Sprintf("%.0f protected", snapshot.data.volsyncSources), Detail: fmt.Sprintf("%.0f drifted · %.0f missed/24h", snapshot.data.volsyncOutOfSync, snapshot.data.volsyncMissed24h), Tone: toneByIssueCounts(snapshot.data.volsyncOutOfSync, snapshot.data.volsyncMissed24h)},
 			},
 			Utilization: []UsageMeter{
-				{Label: "Cluster CPU", Value: data.clusterCPU, Display: fmt.Sprintf("%.1f%%", data.clusterCPU), Detail: "Average non-idle CPU across nodes", Tone: toneByThreshold(data.clusterCPU, s.cfg.Thresholds.NodeCPUWarnPercent)},
-				{Label: "Cluster Memory", Value: data.clusterMemory, Display: fmt.Sprintf("%.1f%%", data.clusterMemory), Detail: "Allocated working memory footprint", Tone: toneByThreshold(data.clusterMemory, s.cfg.Thresholds.NodeMemoryWarnPercent)},
-				{Label: "Healthy Targets", Value: podRatioValue(data.targetsHealthy, data.targetsTotal), Display: fmt.Sprintf("%.0f / %.0f", data.targetsHealthy, data.targetsTotal), Detail: fmt.Sprintf("%.0f namespaces · %.0f running pods", data.namespaces, data.podsRunning), Tone: toneByRatio(data.targetsHealthy, data.targetsTotal)},
+				{Label: "Cluster CPU", Value: snapshot.data.clusterCPU, Display: fmt.Sprintf("%.1f%%", snapshot.data.clusterCPU), Detail: "Average non-idle CPU across nodes", Tone: toneByThreshold(snapshot.data.clusterCPU, s.cfg.Thresholds.NodeCPUWarnPercent)},
+				{Label: "Cluster Memory", Value: snapshot.data.clusterMemory, Display: fmt.Sprintf("%.1f%%", snapshot.data.clusterMemory), Detail: "Allocated working memory footprint", Tone: toneByThreshold(snapshot.data.clusterMemory, s.cfg.Thresholds.NodeMemoryWarnPercent)},
+				{Label: "Healthy Targets", Value: podRatioValue(snapshot.data.targetsHealthy, snapshot.data.targetsTotal), Display: fmt.Sprintf("%.0f / %.0f", snapshot.data.targetsHealthy, snapshot.data.targetsTotal), Detail: fmt.Sprintf("%.0f namespaces · %.0f running pods", snapshot.data.namespaces, snapshot.data.podsRunning), Tone: toneByRatio(snapshot.data.targetsHealthy, snapshot.data.targetsTotal)},
 			},
 			HealthScore:   healthScore,
 			HealthTone:    clusterHealthTone(healthScore),
-			Signals:       buildHubSignals(data.anomalies),
-			Paths:         buildHubPaths(data),
-			TopCPU:        data.topCPU,
-			TopMemory:     data.topMemory,
-			WarningEvents: limitEventRows(data.warningEvents, 4),
+			Signals:       buildHubSignals(snapshot.data.anomalies),
+			Paths:         buildHubPaths(snapshot.data),
+			TopCPU:        snapshot.data.topCPU,
+			TopMemory:     snapshot.data.topMemory,
+			WarningEvents: limitEventRows(snapshot.data.warningEvents, 4),
 		},
 	}
 
 	view.Banner = Banner{
-		Label:  hubStatusLabel(data),
-		Detail: fmt.Sprintf("%d active anomalies across compute, network, storage, and operators", len(data.anomalies)),
-		Tone:   hubStatusTone(data),
+		Label:  hubStatusLabel(snapshot.data),
+		Detail: fmt.Sprintf("%d active anomalies across compute, network, storage, and operators", len(snapshot.data.anomalies)),
+		Tone:   hubStatusTone(snapshot.data),
 		Actions: []Action{
 			{Label: "Open Security Posture", Path: "/security"},
 			{Label: "Review Anomalies", Path: "/anomalies"},
@@ -83,7 +139,7 @@ func (s *Service) Hub(ctx context.Context) ViewModel {
 }
 
 func (s *Service) Security(ctx context.Context) ViewModel {
-	data, errors := s.loadShared(ctx)
+	snapshot := s.loadShared(ctx, "security")
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
@@ -92,41 +148,41 @@ func (s *Service) Security(ctx context.Context) ViewModel {
 		PageTitle:      "Security Posture",
 		Screen:         "security",
 		DemoMode:       s.cfg.DemoMode,
-		GeneratedAt:    time.Now(),
+		GeneratedAt:    snapshot.generatedAt,
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("security"),
-		Errors:         errors,
+		Errors:         snapshot.errors,
 		Security: &SecurityView{
 			SummaryCards: []StatCard{
-				{Label: "Flux Resources", Value: fmt.Sprintf("%.0f", data.fluxTotal), Detail: fmt.Sprintf("%.0f unready · %.0f suspended", data.fluxNotReady, data.fluxSuspended), Tone: toneByIssueCounts(data.fluxNotReady, data.fluxSuspended)},
-				{Label: "Secret Sync", Value: fmt.Sprintf("%.0f ready", data.externalSecretsReady), Detail: fmt.Sprintf("%.0f degraded · %.0f sync errors/24h", data.externalSecretsDegraded, data.externalSecretSyncErrors24h), Tone: toneByIssueCounts(data.externalSecretsDegraded, data.externalSecretSyncErrors24h)},
-				{Label: "Backup Sources", Value: fmt.Sprintf("%.0f protected", data.volsyncSources), Detail: fmt.Sprintf("%.0f drifted · %.0f missed/24h", data.volsyncOutOfSync, data.volsyncMissed24h), Tone: toneByIssueCounts(data.volsyncOutOfSync, data.volsyncMissed24h)},
-				{Label: "CNPG Clusters", Value: fmt.Sprintf("%.0f clusters", data.cnpgClusters), Detail: fmt.Sprintf("%.0f instances · max lag %s", data.cnpgInstances, formatSeconds(data.cnpgMaxReplicationLag)), Tone: toneByThreshold(data.cnpgMaxReplicationLag, 30)},
+				{Label: "Flux Resources", Value: fmt.Sprintf("%.0f", snapshot.data.fluxTotal), Detail: fmt.Sprintf("%.0f unready · %.0f suspended", snapshot.data.fluxNotReady, snapshot.data.fluxSuspended), Tone: toneByIssueCounts(snapshot.data.fluxNotReady, snapshot.data.fluxSuspended)},
+				{Label: "Secret Sync", Value: fmt.Sprintf("%.0f ready", snapshot.data.externalSecretsReady), Detail: fmt.Sprintf("%.0f degraded · %.0f sync errors/24h", snapshot.data.externalSecretsDegraded, snapshot.data.externalSecretSyncErrors24h), Tone: toneByIssueCounts(snapshot.data.externalSecretsDegraded, snapshot.data.externalSecretSyncErrors24h)},
+				{Label: "Backup Sources", Value: fmt.Sprintf("%.0f protected", snapshot.data.volsyncSources), Detail: fmt.Sprintf("%.0f drifted · %.0f missed/24h", snapshot.data.volsyncOutOfSync, snapshot.data.volsyncMissed24h), Tone: toneByIssueCounts(snapshot.data.volsyncOutOfSync, snapshot.data.volsyncMissed24h)},
+				{Label: "CNPG Clusters", Value: fmt.Sprintf("%.0f clusters", snapshot.data.cnpgClusters), Detail: fmt.Sprintf("%.0f instances · max lag %s", snapshot.data.cnpgInstances, formatSeconds(snapshot.data.cnpgMaxReplicationLag)), Tone: toneByThreshold(snapshot.data.cnpgMaxReplicationLag, 30)},
 			},
-			FluxCards:           buildFluxCards(data.fluxKinds),
-			FluxKinds:           data.fluxKinds,
-			FluxRecent:          data.fluxRecent,
-			CNPGCards:           buildCNPGCards(data),
-			CNPGClusters:        data.cnpgClusterRows,
-			VolSyncCards:        buildVolSyncCards(data),
-			VolSyncSources:      data.volsyncSourceRows,
-			ExternalSecretCards: buildExternalSecretCards(data),
-			ExternalSecrets:     data.externalSecretRows,
-			EnvoyCards:          buildEnvoyCards(data),
-			EnvoyRoutes:         data.envoyRouteRows,
-			ToolhiveCards:       buildToolhiveCards(data),
-			ToolhiveBackends:    data.toolhiveBackendRows,
-			RenovateCards:       buildRenovateCards(data),
-			RenovateProjects:    data.renovateProjectRows,
-			SlowReconciles:      data.slowestFlux,
-			WarningEvents:       data.warningEvents,
+			FluxCards:           buildFluxCards(snapshot.data.fluxKinds),
+			FluxKinds:           snapshot.data.fluxKinds,
+			FluxRecent:          snapshot.data.fluxRecent,
+			CNPGCards:           buildCNPGCards(snapshot.data),
+			CNPGClusters:        snapshot.data.cnpgClusterRows,
+			VolSyncCards:        buildVolSyncCards(snapshot.data),
+			VolSyncSources:      snapshot.data.volsyncSourceRows,
+			ExternalSecretCards: buildExternalSecretCards(snapshot.data),
+			ExternalSecrets:     snapshot.data.externalSecretRows,
+			EnvoyCards:          buildEnvoyCards(snapshot.data),
+			EnvoyRoutes:         snapshot.data.envoyRouteRows,
+			ToolhiveCards:       buildToolhiveCards(snapshot.data),
+			ToolhiveBackends:    snapshot.data.toolhiveBackendRows,
+			RenovateCards:       buildRenovateCards(snapshot.data),
+			RenovateProjects:    snapshot.data.renovateProjectRows,
+			SlowReconciles:      snapshot.data.slowestFlux,
+			WarningEvents:       snapshot.data.warningEvents,
 		},
 	}
 
 	view.Banner = Banner{
-		Label:  securityStatusLabel(data),
+		Label:  securityStatusLabel(snapshot.data),
 		Detail: "GitOps, secret sync, backup replication, database HA, edge traffic, and operator automation health.",
-		Tone:   securityStatusTone(data),
+		Tone:   securityStatusTone(snapshot.data),
 		Actions: []Action{
 			{Label: "Back To Hub", Path: "/"},
 			{Label: "Open Forecasting", Path: "/forecasting"},
@@ -137,7 +193,7 @@ func (s *Service) Security(ctx context.Context) ViewModel {
 }
 
 func (s *Service) Anomalies(ctx context.Context) ViewModel {
-	data, errors := s.loadShared(ctx)
+	snapshot := s.loadShared(ctx, "anomalies")
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
@@ -146,34 +202,34 @@ func (s *Service) Anomalies(ctx context.Context) ViewModel {
 		PageTitle:      "Anomaly Explorer",
 		Screen:         "anomalies",
 		DemoMode:       s.cfg.DemoMode,
-		GeneratedAt:    time.Now(),
+		GeneratedAt:    snapshot.generatedAt,
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("anomalies"),
-		Errors:         errors,
+		Errors:         snapshot.errors,
 		Anomalies: &AnomaliesView{
 			SummaryCards: []StatCard{
-				{Label: "Active Signals", Value: fmt.Sprintf("%d", len(data.anomalies)), Detail: "Current rule hits across live telemetry", Tone: anomalyBannerTone(data.anomalies)},
-				{Label: "Critical Signals", Value: fmt.Sprintf("%d", countSeverity(data.anomalies, "critical")), Detail: "Immediate remediation required", Tone: "critical"},
-				{Label: "Noisiest Domain", Value: anomalyTopCategoryLabel(data.anomalies), Detail: "Primary concentration of live rule hits", Tone: anomalyTopCategoryTone(data.anomalies)},
-				{Label: "Primary Resource", Value: anomalyTopResourceLabel(data.anomalies), Detail: "Most repeated resource across active detections", Tone: "warning"},
+				{Label: "Active Signals", Value: fmt.Sprintf("%d", len(snapshot.data.anomalies)), Detail: "Current rule hits across live telemetry", Tone: anomalyBannerTone(snapshot.data.anomalies)},
+				{Label: "Critical Signals", Value: fmt.Sprintf("%d", countSeverity(snapshot.data.anomalies, "critical")), Detail: "Immediate remediation required", Tone: "critical"},
+				{Label: "Noisiest Domain", Value: anomalyTopCategoryLabel(snapshot.data.anomalies), Detail: "Primary concentration of live rule hits", Tone: anomalyTopCategoryTone(snapshot.data.anomalies)},
+				{Label: "Primary Resource", Value: anomalyTopResourceLabel(snapshot.data.anomalies), Detail: "Most repeated resource across active detections", Tone: "warning"},
 			},
-			Chart:       buildAnomalyChart(data),
-			Events:      buildAnomalyEvents(data.anomalies),
-			DomainCards: buildAnomalyDomainCards(data),
-			Hotspots:    buildAnomalyHotspots(data.anomalies),
+			Chart:       buildAnomalyChart(snapshot.data),
+			Events:      buildAnomalyEvents(snapshot.data.anomalies),
+			DomainCards: buildAnomalyDomainCards(snapshot.data),
+			Hotspots:    buildAnomalyHotspots(snapshot.data.anomalies),
 			Actions: []Action{
 				{Label: "Open Security Posture", Path: "/security"},
 				{Label: "Open Insight Hub", Path: "/"},
 				{Label: "Open Forecasting", Path: "/forecasting"},
 			},
-			WarningEvents: data.warningEvents,
+			WarningEvents: snapshot.data.warningEvents,
 		},
 	}
 
 	view.Banner = Banner{
-		Label:  anomalyBannerLabel(data.anomalies),
+		Label:  anomalyBannerLabel(snapshot.data.anomalies),
 		Detail: "Rule-based detection from live Prometheus signals across compute, network, storage, and operators.",
-		Tone:   anomalyBannerTone(data.anomalies),
+		Tone:   anomalyBannerTone(snapshot.data.anomalies),
 		Actions: []Action{
 			{Label: "Open Hub", Path: "/"},
 			{Label: "Open Security", Path: "/security"},
@@ -184,12 +240,12 @@ func (s *Service) Anomalies(ctx context.Context) ViewModel {
 }
 
 func (s *Service) Forecast(ctx context.Context) ViewModel {
-	data, errors := s.loadShared(ctx)
+	snapshot := s.loadShared(ctx, "forecasting")
 
-	rustfsForecast := projectSeriesHours(data.rustfsCapacityTrend, 24*30)
-	cnpgForecast := projectSeriesHours(data.cnpgSizeTrend, 24*30)
-	backupForecast := projectSeriesHours(data.volsyncDurationTrend, 24*7)
-	trafficForecast := projectSeriesHours(data.envoyTrafficTrend, 24*7)
+	rustfsForecast := projectSeriesHours(snapshot.data.rustfsCapacityTrend, 24*30)
+	cnpgForecast := projectSeriesHours(snapshot.data.cnpgSizeTrend, 24*30)
+	backupForecast := projectSeriesHours(snapshot.data.volsyncDurationTrend, 24*7)
+	trafficForecast := projectSeriesHours(snapshot.data.envoyTrafficTrend, 24*7)
 
 	view := ViewModel{
 		AppName:        s.cfg.AppName,
@@ -198,46 +254,46 @@ func (s *Service) Forecast(ctx context.Context) ViewModel {
 		PageTitle:      "Forecasting",
 		Screen:         "forecasting",
 		DemoMode:       s.cfg.DemoMode,
-		GeneratedAt:    time.Now(),
+		GeneratedAt:    snapshot.generatedAt,
 		RefreshSeconds: int(s.cfg.RefreshInterval.Seconds()),
 		Navigation:     s.navigation("forecasting"),
-		Errors:         errors,
+		Errors:         snapshot.errors,
 		Forecast: &ForecastView{
 			ForecastCards: []ForecastCard{
 				{
 					Label:      "RustFS Capacity",
-					Current:    formatBytes(data.rustfsCapacityCurrent),
+					Current:    formatBytes(snapshot.data.rustfsCapacityCurrent),
 					Projection: fmt.Sprintf("%s in 30d", formatBytes(rustfsForecast.projected)),
 					Trend:      fmt.Sprintf("%s over next 30d", formatSignedBytes(rustfsForecast.delta)),
 					Tone:       "info",
 				},
 				{
 					Label:      "CNPG Primary Size",
-					Current:    formatBytes(data.cnpgTotalSizeBytes),
+					Current:    formatBytes(snapshot.data.cnpgTotalSizeBytes),
 					Projection: fmt.Sprintf("%s in 30d", formatBytes(cnpgForecast.projected)),
 					Trend:      fmt.Sprintf("%s over next 30d", formatSignedBytes(cnpgForecast.delta)),
 					Tone:       "info",
 				},
 				{
 					Label:      "Backup Duration",
-					Current:    formatDurationShort(time.Duration(data.volsyncLongestDuration * float64(time.Second))),
+					Current:    formatDurationShort(time.Duration(snapshot.data.volsyncLongestDuration * float64(time.Second))),
 					Projection: fmt.Sprintf("%s in 7d", formatDurationShort(time.Duration(backupForecast.projected*float64(time.Second)))),
 					Trend:      fmt.Sprintf("%s over next 7d", formatSignedDurationSeconds(backupForecast.delta)),
 					Tone:       forecastTone(backupForecast.projected, 60),
 				},
 				{
 					Label:      "Edge Traffic",
-					Current:    fmt.Sprintf("%s req/s", formatRate(data.envoyRequestRate)),
+					Current:    fmt.Sprintf("%s req/s", formatRate(snapshot.data.envoyRequestRate)),
 					Projection: fmt.Sprintf("%s req/s in 7d", formatRate(trafficForecast.projected)),
 					Trend:      fmt.Sprintf("%s req/s over next 7d", formatSignedRate(trafficForecast.delta)),
 					Tone:       "good",
 				},
 			},
 			Series: []SparklineCard{
-				buildBytesSparkline("RustFS Capacity", data.rustfsCapacityTrend, "object storage footprint over the last 24h"),
-				buildBytesSparkline("CNPG Primary Size", data.cnpgSizeTrend, "primary database footprint across clusters"),
-				buildDurationSparkline("VolSync Sync Duration", data.volsyncDurationTrend, "longest source sync duration over the last 24h"),
-				buildRateSparkline("Envoy Request Rate", data.envoyTrafficTrend, "aggregate upstream requests per second"),
+				buildBytesSparkline("RustFS Capacity", snapshot.data.rustfsCapacityTrend, "object storage footprint over the last 24h"),
+				buildBytesSparkline("CNPG Primary Size", snapshot.data.cnpgSizeTrend, "primary database footprint across clusters"),
+				buildDurationSparkline("VolSync Sync Duration", snapshot.data.volsyncDurationTrend, "longest source sync duration over the last 24h"),
+				buildRateSparkline("Envoy Request Rate", snapshot.data.envoyTrafficTrend, "aggregate upstream requests per second"),
 			},
 		},
 	}
@@ -335,15 +391,149 @@ type sharedData struct {
 	podTrend                    []float64
 }
 
-func (s *Service) loadShared(ctx context.Context) (sharedData, []string) {
+func (s *Service) loadShared(ctx context.Context, screen string) sharedSnapshot {
 	if s.cfg.DemoMode {
-		return demoSharedData(), nil
+		return sharedSnapshot{
+			data:        demoSharedData(),
+			generatedAt: time.Now(),
+		}
 	}
 
-	return s.collectShared(ctx)
+	s.snapshotMu.RLock()
+	state := s.snapshots[screen]
+	if state.loaded && time.Since(state.snapshot.generatedAt) < s.cfg.RefreshInterval {
+		snapshot := state.snapshot
+		s.snapshotMu.RUnlock()
+		return snapshot
+	}
+
+	refreshCh := state.refreshCh
+	if state.loaded && refreshCh != nil {
+		snapshot := state.snapshot
+		s.snapshotMu.RUnlock()
+		return snapshot
+	}
+	s.snapshotMu.RUnlock()
+
+	snapshot, loaded := s.refreshSnapshot(ctx, screen)
+	if loaded {
+		return snapshot
+	}
+
+	return sharedSnapshot{
+		generatedAt: time.Now(),
+		errors:      []string{fmt.Sprintf("shared snapshot refresh failed: %v", ctx.Err())},
+	}
 }
 
-func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
+func (s *Service) refreshSnapshot(ctx context.Context, screen string) (sharedSnapshot, bool) {
+	s.snapshotMu.Lock()
+	state := s.snapshots[screen]
+	if state.loaded && time.Since(state.snapshot.generatedAt) < s.cfg.RefreshInterval {
+		snapshot := state.snapshot
+		s.snapshotMu.Unlock()
+		return snapshot, true
+	}
+
+	if state.refreshCh != nil {
+		refreshCh := state.refreshCh
+		stale, staleLoaded := state.snapshot, state.loaded
+		s.snapshotMu.Unlock()
+		if staleLoaded {
+			return stale, true
+		}
+
+		select {
+		case <-refreshCh:
+			s.snapshotMu.RLock()
+			state = s.snapshots[screen]
+			snapshot, loaded := state.snapshot, state.loaded
+			s.snapshotMu.RUnlock()
+			return snapshot, loaded
+		case <-ctx.Done():
+			return sharedSnapshot{}, false
+		}
+	}
+
+	refreshCh := make(chan struct{})
+	state.refreshCh = refreshCh
+	s.snapshotMu.Unlock()
+
+	data, errors := s.collectScreen(ctx, screen)
+	snapshot := sharedSnapshot{
+		data:        data,
+		errors:      errors,
+		generatedAt: time.Now(),
+	}
+
+	s.snapshotMu.Lock()
+	state = s.snapshots[screen]
+	state.snapshot = snapshot
+	state.loaded = true
+	state.refreshCh = nil
+	close(refreshCh)
+	s.snapshotMu.Unlock()
+
+	return snapshot, true
+}
+
+func (s *Service) collectScreen(ctx context.Context, screen string) (sharedData, []string) {
+	switch screen {
+	case "hub":
+		return s.collectShared(ctx, loadPlan{
+			hubSummaryScalars: true,
+			topNodeStats:      true,
+			anomalies:         true,
+			warningEvents:     true,
+		})
+	case "security":
+		return s.collectShared(ctx, loadPlan{
+			securitySummaryScalars: true,
+			securityDetails:        true,
+			warningEvents:          true,
+			kubeSecurity:           true,
+		})
+	case "anomalies":
+		return s.collectShared(ctx, loadPlan{
+			anomalies:      true,
+			anomalyTrends:  true,
+			warningEvents:  true,
+		})
+	case "forecasting":
+		return s.collectShared(ctx, loadPlan{
+			forecastScalars: true,
+			forecastTrends:  true,
+		})
+	default:
+		return s.collectShared(ctx, loadPlan{
+			hubSummaryScalars:      true,
+			securitySummaryScalars: true,
+			topNodeStats:           true,
+			securityDetails:        true,
+			anomalies:              true,
+			anomalyTrends:          true,
+			forecastScalars:        true,
+			forecastTrends:         true,
+			warningEvents:          true,
+			kubeSecurity:           true,
+		})
+	}
+}
+
+type loadPlan struct {
+	hubSummaryScalars      bool
+	securitySummaryScalars bool
+	topNodeStats           bool
+	securityDetails        bool
+	anomalies              bool
+	anomalyTrends          bool
+	forecastScalars        bool
+	forecastTrends         bool
+	warningEvents          bool
+	kubeSecurity           bool
+}
+
+func (s *Service) collectShared(ctx context.Context, plan loadPlan) (sharedData, []string) {
 	var (
 		data   sharedData
 		errors []string
@@ -480,86 +670,115 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		*dest = flattenSeries(series)
 	}
 
-	recordScalar(`sum(kube_node_status_condition{condition="Ready",status="true"})`, &data.nodesReady)
-	recordScalar(`count(kube_node_info)`, &data.nodesTotal)
-	recordScalar(`count(kube_namespace_status_phase{phase="Active"})`, &data.namespaces)
-	recordScalar(`sum(kube_pod_status_phase{phase="Running"})`, &data.podsRunning)
-	recordScalar(`sum(kube_pod_status_phase{phase="Pending"})`, &data.podsPending)
-	recordScalar(`sum(kube_pod_status_phase{phase=~"Failed|Unknown"})`, &data.podsFailed)
-	recordScalar(`sum(up)`, &data.targetsHealthy)
-	recordScalar(`count(up)`, &data.targetsTotal)
-	recordScalar(`100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))`, &data.clusterCPU)
-	recordScalar(`100 * (1 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)))`, &data.clusterMemory)
-	recordScalar(`sum(flux_resource_info{ready="True"})`, &data.fluxReady)
-	recordScalar(`sum(flux_resource_info{ready!="True"})`, &data.fluxNotReady)
-	recordScalar(`sum(flux_resource_info{suspended="True"})`, &data.fluxSuspended)
-	recordScalar(`sum(flux_resource_info)`, &data.fluxTotal)
-	recordScalar(`sum(up{namespace="flux-system"})`, &data.fluxControllersUp)
-	recordScalar(`count(up{namespace="flux-system"}) - sum(up{namespace="flux-system"})`, &data.fluxControllersDown)
-	recordScalar(`count(up == 0)`, &data.downTargetCount)
-	recordScalar(`count(sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > 0)`, &data.restartBurstCount)
-	recordScalar(`sum(externalsecret_status_condition{condition="Ready",status="True"})`, &data.externalSecretsReady)
-	recordScalar(`sum(externalsecret_status_condition{condition="Ready",status!="True"})`, &data.externalSecretsDegraded)
-	recordScalar(`sum(increase(externalsecret_sync_calls_error[24h]))`, &data.externalSecretSyncErrors24h)
-	recordScalar(`count(volsync_missed_intervals_total{role="source"})`, &data.volsyncSources)
-	recordScalar(`sum(volsync_volume_out_of_sync{role="source"})`, &data.volsyncOutOfSync)
-	recordScalar(`sum(increase(volsync_missed_intervals_total{role="source"}[24h]))`, &data.volsyncMissed24h)
-	recordScalar(`count(count by(job) (cnpg_pg_replication_streaming_replicas))`, &data.cnpgClusters)
-	recordScalar(`sum(count by(job, namespace) (cnpg_collector_up))`, &data.cnpgInstances)
-	recordScalar(`sum(max by(job) (cnpg_pg_replication_streaming_replicas))`, &data.cnpgStreamingReplicas)
-	recordScalar(`max(cnpg_pg_stat_replication_write_lag_seconds)`, &data.cnpgMaxReplicationLag)
-	recordScalar(`sum(rate(envoy_cluster_external_upstream_rq[5m]))`, &data.envoyRequestRate)
-	recordScalar(`sum(rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class="5"}[5m]))`, &data.envoyErrorRate)
-	recordScalar(`histogram_quantile(0.95, sum(rate(envoy_cluster_external_upstream_rq_time_bucket[5m])) by (le))`, &data.envoyP95Latency)
-	recordScalar(`sum(toolhive_mcp_active_connections)`, &data.toolhiveConnections)
-	recordScalar(`count(count by(target_workload_name) (toolhive_vmcp_backend_requests_total))`, &data.toolhiveBackends)
-	recordScalar(`sum(increase(toolhive_vmcp_backend_errors_total[24h]))`, &data.toolhiveBackendErrors24h)
-	recordScalar(`sum(rate(toolhive_vmcp_backend_requests_duration_seconds_sum[5m])) / sum(rate(toolhive_vmcp_backend_requests_duration_seconds_count[5m]))`, &data.toolhiveAvgBackendLatency)
-	recordScalar(`count(renovate_operator_run_failed)`, &data.renovateProjects)
-	recordScalar(`sum(increase(renovate_operator_project_executions_total[24h]))`, &data.renovateExecutions24h)
-	recordScalar(`sum(renovate_operator_run_failed)`, &data.renovateRunsFailed)
-	recordScalar(`sum(renovate_operator_dependency_issues)`, &data.renovateDependencyIssues)
-	recordScalar(`count(sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq[5m])) > 0)`, &data.envoyActiveRoutes)
-	recordScalar(`sum(rustfs_capacity_current)`, &data.rustfsCapacityCurrent)
+	if plan.hubSummaryScalars {
+		recordScalar(`sum(kube_node_status_condition{condition="Ready",status="true"})`, &data.nodesReady)
+		recordScalar(`count(kube_node_info)`, &data.nodesTotal)
+		recordScalar(`count(kube_namespace_status_phase{phase="Active"})`, &data.namespaces)
+		recordScalar(`sum(kube_pod_status_phase{phase="Running"})`, &data.podsRunning)
+		recordScalar(`sum(up)`, &data.targetsHealthy)
+		recordScalar(`count(up)`, &data.targetsTotal)
+		recordScalar(`100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))`, &data.clusterCPU)
+		recordScalar(`100 * (1 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)))`, &data.clusterMemory)
+		recordScalar(`sum(flux_resource_info{ready!="True"})`, &data.fluxNotReady)
+		recordScalar(`sum(flux_resource_info{suspended="True"})`, &data.fluxSuspended)
+		recordScalar(`sum(flux_resource_info)`, &data.fluxTotal)
+		recordScalar(`count(up == 0)`, &data.downTargetCount)
+		recordScalar(`sum(externalsecret_status_condition{condition="Ready",status="True"})`, &data.externalSecretsReady)
+		recordScalar(`sum(externalsecret_status_condition{condition="Ready",status!="True"})`, &data.externalSecretsDegraded)
+		recordScalar(`sum(increase(externalsecret_sync_calls_error[24h]))`, &data.externalSecretSyncErrors24h)
+		recordScalar(`count(volsync_missed_intervals_total{role="source"})`, &data.volsyncSources)
+		recordScalar(`sum(volsync_volume_out_of_sync{role="source"})`, &data.volsyncOutOfSync)
+		recordScalar(`sum(increase(volsync_missed_intervals_total{role="source"}[24h]))`, &data.volsyncMissed24h)
+		recordScalar(`sum(rustfs_capacity_current)`, &data.rustfsCapacityCurrent)
+		recordScalar(`sum(
+			sum by(job, namespace, pod) (cnpg_pg_database_size_bytes)
+			* on(job, namespace, pod) group_left
+			max by(job, namespace, pod) (cnpg_pg_replication_in_recovery == bool 0)
+		)`, &data.cnpgTotalSizeBytes)
+		recordScalar(`count((time() - cnpg_collector_last_failed_backup_timestamp) < 604800 and cnpg_collector_last_failed_backup_timestamp > 0)`, &data.cnpgRecentBackupFailures)
+	}
 
-	recordVector(`topk(5, ((1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
-		data.topCPU = make([]ResourceStat, 0, len(values))
-		for _, sample := range values {
-			data.topCPU = append(data.topCPU, ResourceStat{
-				Name:   nodeDisplayName(sample.Metric),
-				Value:  fmt.Sprintf("%.1f%%", sample.Value),
-				Detail: "5m CPU saturation",
-				Tone:   toneByThreshold(sample.Value, s.cfg.Thresholds.NodeCPUWarnPercent),
-			})
-		}
-	})
+	if plan.securitySummaryScalars {
+		recordScalar(`sum(flux_resource_info{ready!="True"})`, &data.fluxNotReady)
+		recordScalar(`sum(flux_resource_info{suspended="True"})`, &data.fluxSuspended)
+		recordScalar(`sum(flux_resource_info)`, &data.fluxTotal)
+		recordScalar(`sum(up{namespace="flux-system"})`, &data.fluxControllersUp)
+		recordScalar(`count(up{namespace="flux-system"}) - sum(up{namespace="flux-system"})`, &data.fluxControllersDown)
+		recordScalar(`sum(externalsecret_status_condition{condition="Ready",status="True"})`, &data.externalSecretsReady)
+		recordScalar(`sum(externalsecret_status_condition{condition="Ready",status!="True"})`, &data.externalSecretsDegraded)
+		recordScalar(`sum(increase(externalsecret_sync_calls_error[24h]))`, &data.externalSecretSyncErrors24h)
+		recordScalar(`count(volsync_missed_intervals_total{role="source"})`, &data.volsyncSources)
+		recordScalar(`sum(volsync_volume_out_of_sync{role="source"})`, &data.volsyncOutOfSync)
+		recordScalar(`sum(increase(volsync_missed_intervals_total{role="source"}[24h]))`, &data.volsyncMissed24h)
+		recordScalar(`count(count by(job) (cnpg_pg_replication_streaming_replicas))`, &data.cnpgClusters)
+		recordScalar(`sum(count by(job, namespace) (cnpg_collector_up))`, &data.cnpgInstances)
+		recordScalar(`max(cnpg_pg_stat_replication_write_lag_seconds)`, &data.cnpgMaxReplicationLag)
+		recordScalar(`sum(rate(envoy_cluster_external_upstream_rq[5m]))`, &data.envoyRequestRate)
+		recordScalar(`sum(rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class="5"}[5m]))`, &data.envoyErrorRate)
+		recordScalar(`histogram_quantile(0.95, sum(rate(envoy_cluster_external_upstream_rq_time_bucket[5m])) by (le))`, &data.envoyP95Latency)
+		recordScalar(`count(sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq[5m])) > 0)`, &data.envoyActiveRoutes)
+		recordScalar(`sum(toolhive_mcp_active_connections)`, &data.toolhiveConnections)
+		recordScalar(`count(count by(target_workload_name) (toolhive_vmcp_backend_requests_total))`, &data.toolhiveBackends)
+		recordScalar(`sum(increase(toolhive_vmcp_backend_errors_total[24h]))`, &data.toolhiveBackendErrors24h)
+		recordScalar(`sum(rate(toolhive_vmcp_backend_requests_duration_seconds_sum[5m])) / sum(rate(toolhive_vmcp_backend_requests_duration_seconds_count[5m]))`, &data.toolhiveAvgBackendLatency)
+		recordScalar(`count(renovate_operator_run_failed)`, &data.renovateProjects)
+		recordScalar(`sum(increase(renovate_operator_project_executions_total[24h]))`, &data.renovateExecutions24h)
+		recordScalar(`sum(renovate_operator_run_failed)`, &data.renovateRunsFailed)
+		recordScalar(`sum(renovate_operator_dependency_issues)`, &data.renovateDependencyIssues)
+	}
 
-	recordVector(`topk(5, ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
-		data.topMemory = make([]ResourceStat, 0, len(values))
-		for _, sample := range values {
-			data.topMemory = append(data.topMemory, ResourceStat{
-				Name:   nodeDisplayName(sample.Metric),
-				Value:  fmt.Sprintf("%.1f%%", sample.Value),
-				Detail: "Memory saturation",
-				Tone:   toneByThreshold(sample.Value, s.cfg.Thresholds.NodeMemoryWarnPercent),
-			})
-		}
-	})
+	if plan.forecastScalars {
+		recordScalar(`sum(rustfs_capacity_current)`, &data.rustfsCapacityCurrent)
+		recordScalar(`sum(
+			sum by(job, namespace, pod) (cnpg_pg_database_size_bytes)
+			* on(job, namespace, pod) group_left
+			max by(job, namespace, pod) (cnpg_pg_replication_in_recovery == bool 0)
+		)`, &data.cnpgTotalSizeBytes)
+		recordScalar(`max(volsync_sync_duration_seconds{role="source",quantile="0.99"}) or vector(0)`, &data.volsyncLongestDuration)
+		recordScalar(`sum(rate(envoy_cluster_external_upstream_rq[5m]))`, &data.envoyRequestRate)
+	}
 
-	recordVector(`topk(6, gotk_reconcile_duration_seconds_sum / gotk_reconcile_duration_seconds_count)`, func(values []prom.Sample) {
-		data.slowestFlux = make([]ResourceStat, 0, len(values))
-		for _, sample := range values {
-			name := sample.Metric["kind"] + "/" + sample.Metric["name"]
-			data.slowestFlux = append(data.slowestFlux, ResourceStat{
-				Name:   name,
-				Value:  fmt.Sprintf("%.2fs", sample.Value),
-				Detail: sample.Metric["namespace"],
-				Tone:   toneByThreshold(sample.Value, 2.5),
-			})
-		}
-	})
+	if plan.topNodeStats {
+		recordVector(`topk(5, ((1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
+			data.topCPU = make([]ResourceStat, 0, len(values))
+			for _, sample := range values {
+				data.topCPU = append(data.topCPU, ResourceStat{
+					Name:   nodeDisplayName(sample.Metric),
+					Value:  fmt.Sprintf("%.1f%%", sample.Value),
+					Detail: "5m CPU saturation",
+					Tone:   toneByThreshold(sample.Value, s.cfg.Thresholds.NodeCPUWarnPercent),
+				})
+			}
+		})
 
-	recordVector(`externalsecret_status_condition{condition="Ready"}`, func(values []prom.Sample) {
+		recordVector(`topk(5, ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) * on(instance) group_left(nodename,kubernetes_node) node_uname_info)`, func(values []prom.Sample) {
+			data.topMemory = make([]ResourceStat, 0, len(values))
+			for _, sample := range values {
+				data.topMemory = append(data.topMemory, ResourceStat{
+					Name:   nodeDisplayName(sample.Metric),
+					Value:  fmt.Sprintf("%.1f%%", sample.Value),
+					Detail: "Memory saturation",
+					Tone:   toneByThreshold(sample.Value, s.cfg.Thresholds.NodeMemoryWarnPercent),
+				})
+			}
+		})
+	}
+
+	if plan.securityDetails {
+		recordVector(`topk(6, gotk_reconcile_duration_seconds_sum / gotk_reconcile_duration_seconds_count)`, func(values []prom.Sample) {
+			data.slowestFlux = make([]ResourceStat, 0, len(values))
+			for _, sample := range values {
+				name := sample.Metric["kind"] + "/" + sample.Metric["name"]
+				data.slowestFlux = append(data.slowestFlux, ResourceStat{
+					Name:   name,
+					Value:  fmt.Sprintf("%.2fs", sample.Value),
+					Detail: sample.Metric["namespace"],
+					Tone:   toneByThreshold(sample.Value, 2.5),
+				})
+			}
+		})
+
+		recordVector(`externalsecret_status_condition{condition="Ready"}`, func(values []prom.Sample) {
 		for _, sample := range values {
 			namespace := sample.Metric["exported_namespace"]
 			if namespace == "" {
@@ -578,9 +797,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				snapshot.Status = "Error"
 			}
 		}
-	})
+		})
 
-	recordVector(`increase(externalsecret_sync_calls_error[24h])`, func(values []prom.Sample) {
+		recordVector(`increase(externalsecret_sync_calls_error[24h])`, func(values []prom.Sample) {
 		for _, sample := range values {
 			namespace := sample.Metric["exported_namespace"]
 			if namespace == "" {
@@ -592,9 +811,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.Errors24h = sample.Value
 		}
-	})
+		})
 
-	recordVector(`topk(24, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq[5m])))`, func(values []prom.Sample) {
+		recordVector(`topk(24, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq[5m])))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureEnvoyRouteSnapshot(sample.Metric["envoy_cluster_name"])
 			if snapshot == nil {
@@ -602,9 +821,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.RequestRate = sample.Value
 		}
-	})
+		})
 
-	recordVector(`topk(24, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])))`, func(values []prom.Sample) {
+		recordVector(`topk(24, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureEnvoyRouteSnapshot(sample.Metric["envoy_cluster_name"])
 			if snapshot == nil {
@@ -612,9 +831,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.ErrorRate = sample.Value
 		}
-	})
+		})
 
-	recordVector(`topk(24, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m])))`, func(values []prom.Sample) {
+		recordVector(`topk(24, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m])))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureEnvoyRouteSnapshot(sample.Metric["envoy_cluster_name"])
 			if snapshot == nil {
@@ -622,9 +841,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.LatencyMs = sample.Value
 		}
-	})
+		})
 
-	recordVector(`sum by(target_workload_name) (increase(toolhive_vmcp_backend_requests_total[24h]))`, func(values []prom.Sample) {
+		recordVector(`sum by(target_workload_name) (increase(toolhive_vmcp_backend_requests_total[24h]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureToolhiveBackendSnapshot(sample.Metric["target_workload_name"])
 			if snapshot == nil {
@@ -632,9 +851,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.Requests24h = sample.Value
 		}
-	})
+		})
 
-	recordVector(`sum by(target_workload_name) (increase(toolhive_vmcp_backend_errors_total[24h]))`, func(values []prom.Sample) {
+		recordVector(`sum by(target_workload_name) (increase(toolhive_vmcp_backend_errors_total[24h]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureToolhiveBackendSnapshot(sample.Metric["target_workload_name"])
 			if snapshot == nil {
@@ -642,9 +861,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.Errors24h = sample.Value
 		}
-	})
+		})
 
-	recordVector(`sum by(target_workload_name) (rate(toolhive_vmcp_backend_requests_duration_seconds_sum[5m])) / sum by(target_workload_name) (rate(toolhive_vmcp_backend_requests_duration_seconds_count[5m]))`, func(values []prom.Sample) {
+		recordVector(`sum by(target_workload_name) (rate(toolhive_vmcp_backend_requests_duration_seconds_sum[5m])) / sum by(target_workload_name) (rate(toolhive_vmcp_backend_requests_duration_seconds_count[5m]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureToolhiveBackendSnapshot(sample.Metric["target_workload_name"])
 			if snapshot == nil {
@@ -652,9 +871,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.LatencySeconds = sample.Value
 		}
-	})
+		})
 
-	recordVector(`increase(renovate_operator_project_executions_total[24h])`, func(values []prom.Sample) {
+		recordVector(`increase(renovate_operator_project_executions_total[24h])`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureRenovateProjectSnapshot(sample.Metric["project"])
 			if snapshot == nil {
@@ -662,9 +881,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.Executions24h += sample.Value
 		}
-	})
+		})
 
-	recordVector(`renovate_operator_dependency_issues`, func(values []prom.Sample) {
+		recordVector(`renovate_operator_dependency_issues`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureRenovateProjectSnapshot(sample.Metric["project"])
 			if snapshot == nil {
@@ -672,9 +891,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.DependencyIssues = sample.Value
 		}
-	})
+		})
 
-	recordVector(`renovate_operator_run_failed`, func(values []prom.Sample) {
+		recordVector(`renovate_operator_run_failed`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureRenovateProjectSnapshot(sample.Metric["project"])
 			if snapshot == nil {
@@ -682,9 +901,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.RunFailed = sample.Value
 		}
-	})
+		})
 
-	recordVector(`max by(job, namespace) (cnpg_pg_replication_streaming_replicas)`, func(values []prom.Sample) {
+		recordVector(`max by(job, namespace) (cnpg_pg_replication_streaming_replicas)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
 			if snapshot == nil {
@@ -692,9 +911,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.StreamingReplicas = sample.Value
 		}
-	})
+		})
 
-	recordVector(`count by(job, namespace) (cnpg_collector_up)`, func(values []prom.Sample) {
+		recordVector(`count by(job, namespace) (cnpg_collector_up)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
 			if snapshot == nil {
@@ -702,9 +921,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.Instances = sample.Value
 		}
-	})
+		})
 
-	recordVector(`volsync_volume_out_of_sync{role="source"}`, func(values []prom.Sample) {
+		recordVector(`volsync_volume_out_of_sync{role="source"}`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureVolsyncSnapshot(sample.Metric["obj_namespace"], sample.Metric["obj_name"])
 			if snapshot == nil {
@@ -715,9 +934,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				snapshot.Method = sample.Metric["method"]
 			}
 		}
-	})
+		})
 
-	recordVector(`increase(volsync_missed_intervals_total{role="source"}[24h])`, func(values []prom.Sample) {
+		recordVector(`increase(volsync_missed_intervals_total{role="source"}[24h])`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureVolsyncSnapshot(sample.Metric["obj_namespace"], sample.Metric["obj_name"])
 			if snapshot == nil {
@@ -728,9 +947,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				snapshot.Method = sample.Metric["method"]
 			}
 		}
-	})
+		})
 
-	recordVector(`max by(job, namespace) (cnpg_pg_stat_replication_write_lag_seconds)`, func(values []prom.Sample) {
+		recordVector(`max by(job, namespace) (cnpg_pg_stat_replication_write_lag_seconds)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
 			if snapshot == nil {
@@ -738,12 +957,12 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.ReplicationLag = sample.Value
 		}
-	})
+		})
 
-	recordVector(`sum by(job, namespace) (
-		sum by(job, namespace, pod) (cnpg_pg_database_size_bytes)
-		* on(job, namespace, pod) group_left
-		max by(job, namespace, pod) (cnpg_pg_replication_in_recovery == bool 0)
+		recordVector(`sum by(job, namespace) (
+			sum by(job, namespace, pod) (cnpg_pg_database_size_bytes)
+			* on(job, namespace, pod) group_left
+			max by(job, namespace, pod) (cnpg_pg_replication_in_recovery == bool 0)
 	)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
@@ -752,9 +971,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.DatabaseSizeBytes = sample.Value
 		}
-	})
+		})
 
-	recordVector(`max by(job, namespace) (cnpg_collector_last_failed_backup_timestamp)`, func(values []prom.Sample) {
+		recordVector(`max by(job, namespace) (cnpg_collector_last_failed_backup_timestamp)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
 			if snapshot == nil {
@@ -762,9 +981,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.LastFailedBackup = sample.Value
 		}
-	})
+		})
 
-	recordVector(`max by(job, namespace) (cnpg_collector_pg_wal_archive_status{value="ready"})`, func(values []prom.Sample) {
+		recordVector(`max by(job, namespace) (cnpg_collector_pg_wal_archive_status{value="ready"})`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
 			if snapshot == nil {
@@ -772,9 +991,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.WALReadyQueue = sample.Value
 		}
-	})
+		})
 
-	recordVector(`max by(job, namespace) (cnpg_pg_stat_archiver_seconds_since_last_archival)`, func(values []prom.Sample) {
+		recordVector(`max by(job, namespace) (cnpg_pg_stat_archiver_seconds_since_last_archival)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			snapshot := ensureCNPGSnapshot(sample.Metric)
 			if snapshot == nil {
@@ -782,9 +1001,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 			snapshot.SecondsSinceArchival = sample.Value
 		}
-	})
+		})
 
-	recordVector(`sum by(kind, ready, suspended) (flux_resource_info)`, func(values []prom.Sample) {
+		recordVector(`sum by(kind, ready, suspended) (flux_resource_info)`, func(values []prom.Sample) {
 		byKind := map[string]*KindStatus{}
 		for _, sample := range values {
 			kind := sample.Metric["kind"]
@@ -823,9 +1042,11 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		sort.Slice(data.fluxKinds, func(i, j int) bool {
 			return data.fluxKinds[i].Kind < data.fluxKinds[j].Kind
 		})
-	})
+		})
+	}
 
-	recordVector(`topk(8, max by(job, instance, namespace, pod) (1 - up)) > 0`, func(values []prom.Sample) {
+	if plan.anomalies {
+		recordVector(`topk(8, max by(job, instance, namespace, pod) (1 - up)) > 0`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < 1 {
 				continue
@@ -840,9 +1061,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Prometheus scrape failed for this target.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > 0)`, func(values []prom.Sample) {
+		recordVector(`topk(8, sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > 0)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < s.cfg.Thresholds.RestartBurstThreshold {
 				continue
@@ -857,9 +1078,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Repeated restarts exceeded the configured threshold.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, max by(namespace,pod,phase) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0)`, func(values []prom.Sample) {
+		recordVector(`topk(8, max by(namespace,pod,phase) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < 1 {
 				continue
@@ -878,9 +1099,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "This workload is not in the running state.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, flux_resource_info{ready!="True"})`, func(values []prom.Sample) {
+		recordVector(`topk(8, flux_resource_info{ready!="True"})`, func(values []prom.Sample) {
 		for _, sample := range values {
 			data.anomalies = append(data.anomalies, AnomalySignal{
 				Category: "Operators",
@@ -892,9 +1113,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Flux reports this resource as not ready.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(6, cilium_controllers_failing)`, func(values []prom.Sample) {
+		recordVector(`topk(6, cilium_controllers_failing)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -909,9 +1130,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "One or more Cilium controllers are failing on this node.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(6, cilium_bpf_map_pressure)`, func(values []prom.Sample) {
+		recordVector(`topk(6, cilium_bpf_map_pressure)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < 0.10 {
 				continue
@@ -926,9 +1147,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "A Cilium BPF map is filling up on this node.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(6, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])))`, func(values []prom.Sample) {
+		recordVector(`topk(6, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < 0.02 {
 				continue
@@ -947,9 +1168,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Upstream 4xx/5xx responses are elevated for this route.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(6, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m])))`, func(values []prom.Sample) {
+		recordVector(`topk(6, sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m])))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < 250 {
 				continue
@@ -968,9 +1189,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Average upstream request latency is elevated for this route.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, volsync_volume_out_of_sync{role="source"})`, func(values []prom.Sample) {
+		recordVector(`topk(8, volsync_volume_out_of_sync{role="source"})`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -985,9 +1206,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "This replication source is not synchronized with its backup target.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, increase(volsync_missed_intervals_total{role="source"}[6h]))`, func(values []prom.Sample) {
+		recordVector(`topk(8, increase(volsync_missed_intervals_total{role="source"}[6h]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -1002,9 +1223,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "This replication source has missed scheduled backup intervals.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, cnpg_pg_replication_lag)`, func(values []prom.Sample) {
+		recordVector(`topk(8, cnpg_pg_replication_lag)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 30 {
 				continue
@@ -1023,9 +1244,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "A PostgreSQL replica is lagging behind its primary.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, cnpg_collector_last_failed_backup_timestamp)`, func(values []prom.Sample) {
+		recordVector(`topk(8, cnpg_collector_last_failed_backup_timestamp)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -1044,9 +1265,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "A recent CloudNativePG backup failure was recorded for this cluster.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, externalsecret_status_condition{condition="Ready",status!="True"} == 1)`, func(values []prom.Sample) {
+		recordVector(`topk(8, externalsecret_status_condition{condition="Ready",status!="True"} == 1)`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value < 1 {
 				continue
@@ -1061,9 +1282,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "An ExternalSecret is not reporting a Ready status.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, increase(externalsecret_sync_calls_error[30m]))`, func(values []prom.Sample) {
+		recordVector(`topk(8, increase(externalsecret_sync_calls_error[30m]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -1078,9 +1299,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Recent sync attempts to the provider backend returned errors.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, increase(toolhive_vmcp_backend_errors_total[30m]))`, func(values []prom.Sample) {
+		recordVector(`topk(8, increase(toolhive_vmcp_backend_errors_total[30m]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -1099,9 +1320,9 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Toolhive recorded backend request errors for this MCP workload.",
 			})
 		}
-	})
+		})
 
-	recordVector(`topk(8, increase(renovate_operator_run_failed[24h]))`, func(values []prom.Sample) {
+		recordVector(`topk(8, increase(renovate_operator_run_failed[24h]))`, func(values []prom.Sample) {
 		for _, sample := range values {
 			if sample.Value <= 0 {
 				continue
@@ -1116,42 +1337,33 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 				Details:  "Recent Renovate executions failed for this repository.",
 			})
 		}
-	})
+		})
+	}
 
 	computeTrendQuery := fmt.Sprintf(`(count(max by(job, instance, namespace, pod) (1 - up) > 0) + count(sum by(namespace,pod) (increase(kube_pod_container_status_restarts_total[30m])) > %.0f) + count(max by(namespace,pod,phase) (kube_pod_status_phase{phase=~"Pending|Failed|Unknown"}) > 0)) or vector(0)`, s.cfg.Thresholds.RestartBurstThreshold)
 	networkTrendQuery := `((count(cilium_controllers_failing > 0) + count(cilium_bpf_map_pressure > 0.10) + count(sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_xx{envoy_response_code_class=~"4|5"}[5m])) > 0.02) + count((sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_sum[5m])) / sum by(envoy_cluster_name) (rate(envoy_cluster_external_upstream_rq_time_count[5m]))) > 250))) or vector(0)`
 	storageTrendQuery := `((count(volsync_volume_out_of_sync{role="source"} > 0) + count(increase(volsync_missed_intervals_total{role="source"}[6h]) > 0) + count(cnpg_pg_replication_lag > 30) + count((time() - cnpg_collector_last_failed_backup_timestamp) < 604800 and cnpg_collector_last_failed_backup_timestamp > 0))) or vector(0)`
 	operatorTrendQuery := `((count(flux_resource_info{ready!="True"}) + count(increase(toolhive_vmcp_backend_errors_total[30m]) > 0) + count(increase(renovate_operator_run_failed[24h]) > 0) + count(externalsecret_status_condition{condition="Ready",status!="True"} == 1) + count(increase(externalsecret_sync_calls_error[30m]) > 0))) or vector(0)`
 
-	recordRange(computeTrendQuery, &data.computeSignalTrend)
-	recordRange(networkTrendQuery, &data.networkSignalTrend)
-	recordRange(storageTrendQuery, &data.storageSignalTrend)
-	recordRange(operatorTrendQuery, &data.operatorSignalTrend)
-	recordRange(`100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30m])))`, &data.cpuTrend)
-	recordRange(`100 * (1 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)))`, &data.memoryTrend)
-	recordRange(`sum(kube_pod_status_phase{phase="Running"})`, &data.podTrend)
-	recordRange(`sum(rustfs_capacity_current) or vector(0)`, &data.rustfsCapacityTrend)
-	recordRange(`sum(
-		sum by(job, namespace, pod) (cnpg_pg_database_size_bytes)
-		* on(job, namespace, pod) group_left
-		max by(job, namespace, pod) (cnpg_pg_replication_in_recovery == bool 0)
-	) or vector(0)`, &data.cnpgSizeTrend)
-	recordRange(`max(volsync_sync_duration_seconds{role="source",quantile="0.99"}) or vector(0)`, &data.volsyncDurationTrend)
-	recordRange(`sum(rate(envoy_cluster_external_upstream_rq[5m])) or vector(0)`, &data.envoyTrafficTrend)
-
-	data.cnpgClusterRows = buildCNPGClusterRows(cnpgSnapshots, time.Now())
-	for _, row := range data.cnpgClusterRows {
-		data.cnpgTotalSizeBytes += row.SizeBytes
-		data.cnpgWALQueue += row.WALQueue
-		if row.SecondsSinceArchival > data.cnpgMaxArchivalDelay {
-			data.cnpgMaxArchivalDelay = row.SecondsSinceArchival
-		}
-		if row.HasRecentBackupFailure {
-			data.cnpgRecentBackupFailures++
-		}
+	if plan.anomalyTrends {
+		recordRange(computeTrendQuery, &data.computeSignalTrend)
+		recordRange(networkTrendQuery, &data.networkSignalTrend)
+		recordRange(storageTrendQuery, &data.storageSignalTrend)
+		recordRange(operatorTrendQuery, &data.operatorSignalTrend)
 	}
 
-	if s.cfg.EnableKubernetes && s.kube != nil {
+	if plan.forecastTrends {
+		recordRange(`sum(rustfs_capacity_current) or vector(0)`, &data.rustfsCapacityTrend)
+		recordRange(`sum(
+			sum by(job, namespace, pod) (cnpg_pg_database_size_bytes)
+			* on(job, namespace, pod) group_left
+			max by(job, namespace, pod) (cnpg_pg_replication_in_recovery == bool 0)
+		) or vector(0)`, &data.cnpgSizeTrend)
+		recordRange(`max(volsync_sync_duration_seconds{role="source",quantile="0.99"}) or vector(0)`, &data.volsyncDurationTrend)
+		recordRange(`sum(rate(envoy_cluster_external_upstream_rq[5m])) or vector(0)`, &data.envoyTrafficTrend)
+	}
+
+	if s.cfg.EnableKubernetes && s.kube != nil && plan.kubeSecurity {
 		resources, err := s.kube.FluxResources(ctx, 0, s.cfg.NamespaceAllowlist)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("kubernetes flux resources: %v", err))
@@ -1213,7 +1425,10 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 			}
 		}
 
-		events, err := s.kube.WarningEvents(ctx, 8)
+	}
+
+	if s.cfg.EnableKubernetes && s.kube != nil && plan.warningEvents {
+		events, err := s.kube.WarningEvents(ctx, 8, s.cfg.NamespaceAllowlist)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("kubernetes warning events: %v", err))
 		} else {
@@ -1232,50 +1447,64 @@ func (s *Service) collectShared(ctx context.Context) (sharedData, []string) {
 		}
 	}
 
-	data.volsyncSourceRows = buildVolSyncSourceRows(volsyncSnapshots, time.Now())
-	for _, row := range data.volsyncSourceRows {
-		if row.LastSyncDurationSeconds > data.volsyncLongestDuration {
-			data.volsyncLongestDuration = row.LastSyncDurationSeconds
-			data.volsyncSlowestSource = row.Name
-		}
-	}
-
-	data.externalSecretRows = buildExternalSecretRows(externalSecretSnapshots, time.Now())
-	data.externalSecretTotal = float64(len(data.externalSecretRows))
-	for _, row := range data.externalSecretRows {
-		if !row.RefreshAt.IsZero() {
-			age := time.Since(row.RefreshAt).Seconds()
-			if age > data.externalSecretOldestRefresh {
-				data.externalSecretOldestRefresh = age
+	if plan.securityDetails {
+		data.cnpgClusterRows = buildCNPGClusterRows(cnpgSnapshots, time.Now())
+		for _, row := range data.cnpgClusterRows {
+			data.cnpgTotalSizeBytes += row.SizeBytes
+			data.cnpgWALQueue += row.WALQueue
+			if row.SecondsSinceArchival > data.cnpgMaxArchivalDelay {
+				data.cnpgMaxArchivalDelay = row.SecondsSinceArchival
+			}
+			if row.HasRecentBackupFailure {
+				data.cnpgRecentBackupFailures++
 			}
 		}
-	}
 
-	data.envoyRouteRows = buildEnvoyRouteRows(envoyRouteSnapshots)
-	maxEnvoyLatency := -1.0
-	for _, row := range data.envoyRouteRows {
-		if row.LatencyValue > maxEnvoyLatency {
-			maxEnvoyLatency = row.LatencyValue
-			data.envoyTopRoute = row.Route
+		data.volsyncSourceRows = buildVolSyncSourceRows(volsyncSnapshots, time.Now())
+		for _, row := range data.volsyncSourceRows {
+			if row.LastSyncDurationSeconds > data.volsyncLongestDuration {
+				data.volsyncLongestDuration = row.LastSyncDurationSeconds
+				data.volsyncSlowestSource = row.Name
+			}
 		}
-	}
-	if data.envoyTopRoute == "" && len(data.envoyRouteRows) > 0 {
-		data.envoyTopRoute = data.envoyRouteRows[0].Route
-	}
 
-	data.toolhiveBackendRows = buildToolhiveBackendRows(toolhiveBackendSnapshots)
-	maxBackendLatency := -1.0
-	for _, row := range data.toolhiveBackendRows {
-		if row.LatencyValue > maxBackendLatency {
-			maxBackendLatency = row.LatencyValue
-			data.toolhiveSlowestBackend = row.Name
+		data.externalSecretRows = buildExternalSecretRows(externalSecretSnapshots, time.Now())
+		data.externalSecretTotal = float64(len(data.externalSecretRows))
+		for _, row := range data.externalSecretRows {
+			if !row.RefreshAt.IsZero() {
+				age := time.Since(row.RefreshAt).Seconds()
+				if age > data.externalSecretOldestRefresh {
+					data.externalSecretOldestRefresh = age
+				}
+			}
 		}
-	}
-	if data.toolhiveSlowestBackend == "" && len(data.toolhiveBackendRows) > 0 {
-		data.toolhiveSlowestBackend = data.toolhiveBackendRows[0].Name
-	}
 
-	data.renovateProjectRows = buildRenovateProjectRows(renovateProjectSnapshots)
+		data.envoyRouteRows = buildEnvoyRouteRows(envoyRouteSnapshots)
+		maxEnvoyLatency := -1.0
+		for _, row := range data.envoyRouteRows {
+			if row.LatencyValue > maxEnvoyLatency {
+				maxEnvoyLatency = row.LatencyValue
+				data.envoyTopRoute = row.Route
+			}
+		}
+		if data.envoyTopRoute == "" && len(data.envoyRouteRows) > 0 {
+			data.envoyTopRoute = data.envoyRouteRows[0].Route
+		}
+
+		data.toolhiveBackendRows = buildToolhiveBackendRows(toolhiveBackendSnapshots)
+		maxBackendLatency := -1.0
+		for _, row := range data.toolhiveBackendRows {
+			if row.LatencyValue > maxBackendLatency {
+				maxBackendLatency = row.LatencyValue
+				data.toolhiveSlowestBackend = row.Name
+			}
+		}
+		if data.toolhiveSlowestBackend == "" && len(data.toolhiveBackendRows) > 0 {
+			data.toolhiveSlowestBackend = data.toolhiveBackendRows[0].Name
+		}
+
+		data.renovateProjectRows = buildRenovateProjectRows(renovateProjectSnapshots)
+	}
 
 	sort.Slice(data.anomalies, func(i, j int) bool {
 		return severityRank(data.anomalies[i].Severity) < severityRank(data.anomalies[j].Severity)

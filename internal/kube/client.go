@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -101,37 +100,38 @@ func NewClient(kubeconfigPath string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) WarningEvents(ctx context.Context, limit int) ([]WarningEvent, error) {
+func (c *Client) WarningEvents(ctx context.Context, limit int, allowlist []string) ([]WarningEvent, error) {
 	if c == nil || c.clientset == nil {
 		return nil, errors.New("kubernetes client unavailable")
 	}
 
-	events, err := c.clientset.CoreV1().Events("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]WarningEvent, 0, len(events.Items))
-	for _, event := range events.Items {
-		if event.Type != corev1.EventTypeWarning {
-			continue
-		}
-
-		when := event.LastTimestamp.Time
-		if when.IsZero() {
-			when = event.EventTime.Time
-		}
-		if when.IsZero() {
-			when = event.CreationTimestamp.Time
-		}
-
-		result = append(result, WarningEvent{
-			Namespace: event.Namespace,
-			Reason:    event.Reason,
-			Message:   event.Message,
-			Object:    fmt.Sprintf("%s/%s", event.InvolvedObject.Kind, event.InvolvedObject.Name),
-			When:      when,
+	result := make([]WarningEvent, 0, limit)
+	namespaces := namespacesForList(allowlist)
+	for _, namespace := range namespaces {
+		events, err := c.clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+			FieldSelector: "type=Warning",
 		})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, event := range events.Items {
+			when := event.LastTimestamp.Time
+			if when.IsZero() {
+				when = event.EventTime.Time
+			}
+			if when.IsZero() {
+				when = event.CreationTimestamp.Time
+			}
+
+			result = append(result, WarningEvent{
+				Namespace: event.Namespace,
+				Reason:    event.Reason,
+				Message:   event.Message,
+				Object:    fmt.Sprintf("%s/%s", event.InvolvedObject.Kind, event.InvolvedObject.Name),
+				When:      when,
+			})
+		}
 	}
 
 	sort.Slice(result, func(i, j int) bool {
@@ -157,32 +157,21 @@ func (c *Client) FluxResources(ctx context.Context, limit int, allowlist []strin
 		{Group: "source.toolkit.fluxcd.io", Version: "v1", Resource: "ocirepositories"},
 	}
 
-	allowed := map[string]struct{}{}
-	for _, namespace := range allowlist {
-		namespace = strings.TrimSpace(namespace)
-		if namespace != "" {
-			allowed[namespace] = struct{}{}
-		}
-	}
-
 	resources := make([]FluxResource, 0, 128)
 	for _, gvr := range gvrs {
-		list, err := c.dynamic.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("list %s.%s: %w", gvr.Resource, gvr.Group, err)
-		}
-
-		for _, item := range list.Items {
-			resource, ok := fluxResourceFromObject(item)
-			if !ok {
-				continue
+		for _, namespace := range namespacesForList(allowlist) {
+			list, err := c.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("list %s.%s: %w", gvr.Resource, gvr.Group, err)
 			}
-			if len(allowed) > 0 {
-				if _, ok := allowed[resource.Namespace]; !ok {
+
+			for _, item := range list.Items {
+				resource, ok := fluxResourceFromObject(item)
+				if !ok {
 					continue
 				}
+				resources = append(resources, resource)
 			}
-			resources = append(resources, resource)
 		}
 	}
 
@@ -208,31 +197,20 @@ func (c *Client) VolsyncSources(ctx context.Context, limit int, allowlist []stri
 		Resource: "replicationsources",
 	}
 
-	allowed := map[string]struct{}{}
-	for _, namespace := range allowlist {
-		namespace = strings.TrimSpace(namespace)
-		if namespace != "" {
-			allowed[namespace] = struct{}{}
+	sources := make([]VolsyncSource, 0, 32)
+	for _, namespace := range namespacesForList(allowlist) {
+		list, err := c.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("list %s.%s: %w", gvr.Resource, gvr.Group, err)
 		}
-	}
 
-	list, err := c.dynamic.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list %s.%s: %w", gvr.Resource, gvr.Group, err)
-	}
-
-	sources := make([]VolsyncSource, 0, len(list.Items))
-	for _, item := range list.Items {
-		source, ok := volsyncSourceFromObject(item)
-		if !ok {
-			continue
-		}
-		if len(allowed) > 0 {
-			if _, ok := allowed[source.Namespace]; !ok {
+		for _, item := range list.Items {
+			source, ok := volsyncSourceFromObject(item)
+			if !ok {
 				continue
 			}
+			sources = append(sources, source)
 		}
-		sources = append(sources, source)
 	}
 
 	sort.Slice(sources, func(i, j int) bool {
@@ -260,31 +238,20 @@ func (c *Client) ExternalSecrets(ctx context.Context, limit int, allowlist []str
 		Resource: "externalsecrets",
 	}
 
-	allowed := map[string]struct{}{}
-	for _, namespace := range allowlist {
-		namespace = strings.TrimSpace(namespace)
-		if namespace != "" {
-			allowed[namespace] = struct{}{}
+	secrets := make([]ExternalSecret, 0, 64)
+	for _, namespace := range namespacesForList(allowlist) {
+		list, err := c.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("list %s.%s: %w", gvr.Resource, gvr.Group, err)
 		}
-	}
 
-	list, err := c.dynamic.Resource(gvr).Namespace("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list %s.%s: %w", gvr.Resource, gvr.Group, err)
-	}
-
-	secrets := make([]ExternalSecret, 0, len(list.Items))
-	for _, item := range list.Items {
-		secret, ok := externalSecretFromObject(item)
-		if !ok {
-			continue
-		}
-		if len(allowed) > 0 {
-			if _, ok := allowed[secret.Namespace]; !ok {
+		for _, item := range list.Items {
+			secret, ok := externalSecretFromObject(item)
+			if !ok {
 				continue
 			}
+			secrets = append(secrets, secret)
 		}
-		secrets = append(secrets, secret)
 	}
 
 	sort.Slice(secrets, func(i, j int) bool {
@@ -331,6 +298,26 @@ func (c *Client) ClusterSecretStores(ctx context.Context) ([]ClusterSecretStore,
 	})
 
 	return stores, nil
+}
+
+func namespacesForList(allowlist []string) []string {
+	seen := map[string]struct{}{}
+	namespaces := make([]string, 0, len(allowlist))
+	for _, namespace := range allowlist {
+		namespace = strings.TrimSpace(namespace)
+		if namespace == "" {
+			continue
+		}
+		if _, ok := seen[namespace]; ok {
+			continue
+		}
+		seen[namespace] = struct{}{}
+		namespaces = append(namespaces, namespace)
+	}
+	if len(namespaces) == 0 {
+		return []string{metav1.NamespaceAll}
+	}
+	return namespaces
 }
 
 func buildConfig(kubeconfigPath string) (*rest.Config, error) {

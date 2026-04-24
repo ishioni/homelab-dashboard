@@ -108,14 +108,17 @@ func TestParsePercentage(t *testing.T) {
 
 func TestLoadSharedDemoMode(t *testing.T) {
 	service := &Service{cfg: config.Config{DemoMode: true}}
-	data, errs := service.loadShared(t.Context())
-	if len(errs) != 0 {
-		t.Fatalf("expected no backend notes in demo mode, got %d", len(errs))
+	snapshot := service.loadShared(t.Context(), "hub")
+	if len(snapshot.errors) != 0 {
+		t.Fatalf("expected no backend notes in demo mode, got %d", len(snapshot.errors))
 	}
-	if data.fluxTotal == 0 || len(data.anomalies) == 0 {
+	if snapshot.data.fluxTotal == 0 || len(snapshot.data.anomalies) == 0 {
 		t.Fatal("expected populated demo data")
 	}
-	if len(data.computeSignalTrend) == 0 || len(data.operatorSignalTrend) == 0 {
+	if len(snapshot.data.computeSignalTrend) == 0 || len(snapshot.data.operatorSignalTrend) == 0 {
 		t.Fatal("expected demo anomaly trend data to be populated")
+	}
+	if snapshot.generatedAt.IsZero() {
+		t.Fatal("expected snapshot generation time to be populated")
 	}
 }
