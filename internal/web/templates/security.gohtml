@@ -14,112 +14,350 @@
   </div>
 </section>
 
-<section class="security-layout">
-  <article class="panel security-main-panel">
-    <div class="security-panel-head">
-      <div class="security-panel-title">
-        <span class="material-symbols-outlined">compare_arrows</span>
-        <span>Flux Drift Detection</span>
-      </div>
-    </div>
-
-    <div class="flux-card-grid">
-      {{ range .Security.FluxCards }}
-      <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
-        <div class="metric-label">{{ .Label }}</div>
-        <div class="status-card-value">{{ .Value }}</div>
-        <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
-      </article>
-      {{ end }}
-    </div>
-
-    <div class="flux-recent">
-      <div class="flux-recent-header list-grid-header">
-        <div>HELM RELEASE</div>
-        <div>NAMESPACE</div>
-        <div>STATUS</div>
-        <div>AGE</div>
-      </div>
-      <div class="flux-recent-scroll">
-      {{ if .Security.FluxRecent }}
-      {{ range .Security.FluxRecent }}
-      <div class="flux-recent-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
-        <div class="flux-resource-cell">
-          <span class="flux-resource-mark"></span>
-          <div>
-            <div class="row-title">{{ .Name }}</div>
-            <div class="row-detail">HelmRelease</div>
-          </div>
+<section class="security-layout security-layout--single">
+  <div class="security-main-stack">
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">compare_arrows</span>
+          <span>Flux Drift Detection</span>
         </div>
-        <div class="security-row-detail">{{ .Namespace }}</div>
-        <div>
-          <span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span>
-        </div>
-        <div class="row-meta">{{ .Age }}</div>
       </div>
-      {{ end }}
-      {{ else }}
-      <div class="empty">No HelmRelease status data is available from Flux right now.</div>
-      {{ end }}
-      </div>
-    </div>
-  </article>
 
-  <div class="security-sidebar">
-    <article class="panel">
-      <div class="section-title">Platform integrity</div>
-      <div class="integrity-list">
-        {{ range .Security.OperatorRows }}
-        <div class="integrity-row">
-          <div class="integrity-copy">
-            <div class="integrity-title">
-              <span class="material-symbols-outlined tone-{{ .Tone }}">{{ .Icon }}</span>
-              <span>{{ .Name }}</span>
+      <div class="status-card-grid status-card-grid--five">
+        {{ range .Security.FluxCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="flux-recent">
+        <div class="flux-recent-header list-grid-header">
+          <div>HELM RELEASE</div>
+          <div>NAMESPACE</div>
+          <div>AGE</div>
+          <div>STATUS</div>
+        </div>
+        <div class="flux-recent-scroll">
+        {{ if .Security.FluxRecent }}
+        {{ range .Security.FluxRecent }}
+        <div class="flux-recent-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+          <div class="flux-resource-cell">
+            <span class="flux-resource-mark"></span>
+            <div>
+              <div class="row-title">{{ .Name }}</div>
+              <div class="row-detail">HelmRelease</div>
             </div>
-            <div class="integrity-detail">{{ .Detail }}</div>
           </div>
-          <div class="integrity-meta">
-            <div class="tiny-chip tone-{{ .Tone }}">{{ .State }}</div>
-            <div class="row-meta">{{ .Meta }}</div>
-          </div>
-        </div>
-        {{ end }}
-      </div>
-    </article>
-
-    <article class="panel">
-      <div class="section-title">Slowest reconciliations</div>
-      <div class="table">
-        {{ range .Security.SlowReconciles }}
-        <div class="table-row">
+          <div class="security-row-detail">{{ .Namespace }}</div>
+          <div class="row-meta">{{ .Age }}</div>
           <div>
-            <div class="row-title">{{ .Name }}</div>
-            <div class="row-detail">{{ .Detail }}</div>
+            <span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span>
           </div>
-          <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
         </div>
+        {{ end }}
+        {{ else }}
+        <div class="empty">No HelmRelease status data is available from Flux right now.</div>
+        {{ end }}
+        </div>
+      </div>
+    </article>
+
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">database</span>
+          <span>CloudNativePG Health</span>
+        </div>
+      </div>
+
+      <div class="status-card-grid">
+        {{ range .Security.CNPGCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="cnpg-clusters">
+        <div class="cnpg-cluster-header list-grid-header">
+          <div>CLUSTER</div>
+          <div>NAMESPACE</div>
+          <div>REPLICAS</div>
+          <div>LAG</div>
+          <div>BACKUP</div>
+          <div>SIZE</div>
+        </div>
+        {{ if .Security.CNPGClusters }}
+        {{ range .Security.CNPGClusters }}
+        <div class="cnpg-cluster-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+          <div class="flux-resource-cell">
+            <span class="flux-resource-mark"></span>
+            <div class="row-title">{{ .Name }}</div>
+          </div>
+          <div class="security-row-detail">{{ .Namespace }}</div>
+          <div class="row-meta">{{ .Replicas }}</div>
+          <div class="row-meta">{{ .Lag }}</div>
+          <div><span class="tiny-chip tone-{{ .BackupTone }}">{{ .Backup }}</span></div>
+          <div class="row-meta">{{ .Size }}</div>
+        </div>
+        {{ end }}
+        {{ else }}
+        <div class="empty">No CloudNativePG metrics are available right now.</div>
+        {{ end }}
+      </div>
+    </article>
+
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">inventory_2</span>
+          <span>VolSync Backup Integrity</span>
+        </div>
+      </div>
+
+      <div class="status-card-grid">
+        {{ range .Security.VolSyncCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="volsync-sources">
+        <div class="volsync-source-header list-grid-header">
+          <div>SOURCE</div>
+          <div>NAMESPACE</div>
+          <div>SCHEDULE</div>
+          <div>LAST SYNC</div>
+          <div>DURATION</div>
+          <div>STATUS</div>
+        </div>
+        {{ if .Security.VolSyncSources }}
+        <div class="volsync-sources-scroll">
+          {{ range .Security.VolSyncSources }}
+          <div class="volsync-source-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+            <div class="flux-resource-cell">
+              <span class="flux-resource-mark"></span>
+              <div class="row-title">{{ .Name }}</div>
+            </div>
+            <div class="security-row-detail">{{ .Namespace }}</div>
+            <div class="row-meta">{{ .Schedule }}</div>
+            <div class="row-meta">{{ .LastSync }}</div>
+            <div class="row-meta">{{ .Duration }}</div>
+            <div><span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <div class="empty">No VolSync ReplicationSource status is available right now.</div>
+        {{ end }}
+      </div>
+    </article>
+
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">key</span>
+          <span>External Secret Sync</span>
+        </div>
+      </div>
+
+      <div class="status-card-grid">
+        {{ range .Security.ExternalSecretCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="external-secret-list">
+        <div class="external-secret-header list-grid-header">
+          <div>SECRET</div>
+          <div>NAMESPACE</div>
+          <div>STORE</div>
+          <div>REFRESH</div>
+          <div>INTERVAL</div>
+          <div>STATUS</div>
+        </div>
+        {{ if .Security.ExternalSecrets }}
+        <div class="external-secret-scroll">
+          {{ range .Security.ExternalSecrets }}
+          <div class="external-secret-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+            <div class="flux-resource-cell">
+              <span class="flux-resource-mark"></span>
+              <div class="row-title">{{ .Name }}</div>
+            </div>
+            <div class="security-row-detail">{{ .Namespace }}</div>
+            <div class="row-meta">{{ .Store }}</div>
+            <div class="row-meta">{{ .Refresh }}</div>
+            <div class="row-meta">{{ .Interval }}</div>
+            <div><span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <div class="empty">No ExternalSecret status is available right now.</div>
+        {{ end }}
+      </div>
+    </article>
+
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">route</span>
+          <span>Envoy Gateway Traffic</span>
+        </div>
+      </div>
+
+      <div class="status-card-grid">
+        {{ range .Security.EnvoyCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="envoy-routes">
+        <div class="envoy-route-header list-grid-header">
+          <div>ROUTE</div>
+          <div>NAMESPACE</div>
+          <div>REQUESTS</div>
+          <div>ERRORS</div>
+          <div>LATENCY</div>
+          <div>STATUS</div>
+        </div>
+        {{ if .Security.EnvoyRoutes }}
+        <div class="envoy-route-scroll">
+          {{ range .Security.EnvoyRoutes }}
+          <div class="envoy-route-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+            <div class="flux-resource-cell">
+              <span class="flux-resource-mark"></span>
+              <div class="row-title">{{ .Route }}</div>
+            </div>
+            <div class="security-row-detail">{{ .Namespace }}</div>
+            <div class="row-meta">{{ .RequestRate }}</div>
+            <div class="row-meta">{{ .ErrorRate }}</div>
+            <div class="row-meta">{{ .Latency }}</div>
+            <div><span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <div class="empty">No Envoy upstream route metrics are available right now.</div>
+        {{ end }}
+      </div>
+    </article>
+
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">hub</span>
+          <span>Toolhive MCP Backends</span>
+        </div>
+      </div>
+
+      <div class="status-card-grid">
+        {{ range .Security.ToolhiveCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="toolhive-backends">
+        <div class="toolhive-backend-header list-grid-header">
+          <div>BACKEND</div>
+          <div>REQUESTS/24H</div>
+          <div>ERRORS/24H</div>
+          <div>LATENCY</div>
+          <div>STATUS</div>
+        </div>
+        {{ if .Security.ToolhiveBackends }}
+        <div class="toolhive-backend-scroll">
+          {{ range .Security.ToolhiveBackends }}
+          <div class="toolhive-backend-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+            <div class="flux-resource-cell">
+              <span class="flux-resource-mark"></span>
+              <div>
+                <div class="row-title">{{ .Name }}</div>
+                <div class="row-detail">{{ .Detail }}</div>
+              </div>
+            </div>
+            <div class="row-meta">{{ .Requests24h }}</div>
+            <div class="row-meta">{{ .Errors24h }}</div>
+            <div class="row-meta">{{ .Latency }}</div>
+            <div><span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <div class="empty">No Toolhive backend metrics are available right now.</div>
+        {{ end }}
+      </div>
+    </article>
+
+    <article class="panel security-main-panel">
+      <div class="security-panel-head">
+        <div class="security-panel-title">
+          <span class="material-symbols-outlined">auto_awesome</span>
+          <span>Renovate Automation</span>
+        </div>
+      </div>
+
+      <div class="status-card-grid">
+        {{ range .Security.RenovateCards }}
+        <article class="status-card status-card--compact status-card--stateful tone-{{ .Tone }}">
+          <div class="metric-label">{{ .Label }}</div>
+          <div class="status-card-value">{{ .Value }}</div>
+          <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
+        </article>
+        {{ end }}
+      </div>
+
+      <div class="renovate-projects">
+        <div class="renovate-project-header list-grid-header">
+          <div>PROJECT</div>
+          <div>EXECUTIONS/24H</div>
+          <div>ISSUES</div>
+          <div>STATUS</div>
+        </div>
+        {{ if .Security.RenovateProjects }}
+        <div class="renovate-project-scroll">
+          {{ range .Security.RenovateProjects }}
+          <div class="renovate-project-row list-grid-row list-grid-row--stateful tone-{{ .Tone }}">
+            <div class="flux-resource-cell">
+              <span class="flux-resource-mark"></span>
+              <div>
+                <div class="row-title">{{ .Name }}</div>
+                <div class="row-detail">{{ .Detail }}</div>
+              </div>
+            </div>
+            <div class="row-meta">{{ .Executions24h }}</div>
+            <div class="row-meta">{{ .Issues }}</div>
+            <div><span class="tiny-chip tone-{{ .Tone }}">{{ .Status }}</span></div>
+          </div>
+          {{ end }}
+        </div>
+        {{ else }}
+        <div class="empty">No Renovate project metrics are available right now.</div>
         {{ end }}
       </div>
     </article>
   </div>
 </section>
 
-<section class="panel">
-  <div class="section-title">Latest warning events</div>
-  {{ if .Security.WarningEvents }}
-  <div class="table">
-    {{ range .Security.WarningEvents }}
-    <div class="table-row">
-      <div>
-        <div class="row-title">{{ .Reason }} · {{ .Object }}</div>
-        <div class="row-detail">{{ .Namespace }} · {{ .Message }}</div>
-      </div>
-      <div class="row-meta">{{ ago .When }}</div>
-    </div>
-    {{ end }}
-  </div>
-  {{ else }}
-  <div class="empty">No warning events available from the Kubernetes API.</div>
-  {{ end }}
-</section>
 {{ end }}

@@ -9,7 +9,7 @@
       <div class="metric-label">{{ .Label }}</div>
       <div class="forecast-current">{{ .Current }}</div>
       <div class="forecast-projection">{{ .Projection }}</div>
-      <div class="metric-detail">{{ .Trend }}</div>
+      <div class="forecast-trend tone-{{ .Tone }}">{{ .Trend }}</div>
     </article>
     {{ end }}
   </div>
@@ -21,7 +21,7 @@
     {{ range .Forecast.Series }}
     <article class="spark-card">
       <div class="spark-header">
-        <div>
+        <div class="spark-copy">
           <div class="row-title">{{ .Label }}</div>
           <div class="row-detail">{{ .Detail }}</div>
         </div>
@@ -30,9 +30,25 @@
           <div class="row-meta">{{ .Delta }}</div>
         </div>
       </div>
-      <svg class="sparkline" viewBox="0 0 180 56" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}">
-        <path d="{{ .Path }}"></path>
-      </svg>
+      <div class="spark-chart-shell">
+        <div class="chart-scale chart-scale-y">
+          {{ range .Scale }}
+          <span>{{ . }}</span>
+          {{ end }}
+        </div>
+        <div class="spark-chart-main">
+          <svg class="sparkline" viewBox="0 0 180 56" preserveAspectRatio="none" role="img" aria-label="{{ .Label }}">
+            <path d="{{ .Path }}"></path>
+          </svg>
+          <div class="chart-scale chart-scale-x">
+            <span>-24h</span>
+            <span>-18h</span>
+            <span>-12h</span>
+            <span>-6h</span>
+            <span>now</span>
+          </div>
+        </div>
+      </div>
     </article>
     {{ end }}
   </div>

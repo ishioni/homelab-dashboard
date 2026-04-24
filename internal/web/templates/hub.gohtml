@@ -1,43 +1,98 @@
 {{ define "hub_body" }}
 {{ template "page_common" . }}
 
-<section class="panel">
-  <div class="section-title">Cluster summary</div>
-  <div class="headline-grid">
-    {{ range .Hub.Headlines }}
-    <div class="headline-card">{{ . }}</div>
-    {{ end }}
+<section class="panel hub-summary-panel">
+  <div class="hub-summary-accent"></div>
+  <div class="security-panel-head">
+    <div class="security-panel-title">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      <span>Operational Summary</span>
+    </div>
   </div>
-  <div class="card-grid">
-    {{ range .Hub.SummaryCards }}
-    <article class="status-card status-card--accent tone-{{ .Tone }}">
-      <div class="metric-label">{{ .Label }}</div>
-      <div class="status-card-value">{{ .Value }}</div>
-      <div class="status-card-detail tone-{{ .Tone }}">{{ .Detail }}</div>
-    </article>
+  <div class="hub-summary-copy">
+    {{ range .Hub.Headlines }}
+    <p>{{ . }}</p>
     {{ end }}
   </div>
 </section>
 
-<section class="two-column">
-  <article class="panel">
-    <div class="section-title">Capacity view</div>
-    {{ range .Hub.Utilization }}
-    <div class="meter">
-      <div class="meter-head">
-        <span>{{ .Label }}</span>
-        <span class="meter-value">{{ .Display }}</span>
+<section class="hub-layout">
+  <article class="panel hub-health-panel">
+    <div class="security-panel-head">
+      <div class="security-panel-title">
+        <span class="material-symbols-outlined">favorite</span>
+        <span>Cluster Health Index</span>
       </div>
-      <div class="meter-track">
-        <div class="meter-fill tone-{{ .Tone }}" style="width: {{ meterWidth .Value }}"></div>
-      </div>
-      <div class="meter-detail">{{ .Detail }}</div>
+      <div class="tiny-chip tone-{{ .Hub.HealthTone }}">{{ .Hub.HealthTone }}</div>
     </div>
-    {{ end }}
+
+    <div class="hub-health-score">
+      <div class="hub-health-value tone-{{ .Hub.HealthTone }}">{{ .Hub.HealthScore }}</div>
+      <div class="metric-label">/100</div>
+    </div>
+
+    <div class="hub-health-meters">
+      {{ range .Hub.Utilization }}
+      <div class="meter">
+        <div class="meter-head">
+          <span>{{ .Label }}</span>
+          <span class="meter-value">{{ .Display }}</span>
+        </div>
+        <div class="meter-track">
+          <div class="meter-fill tone-{{ .Tone }}" style="width: {{ meterWidth .Value }}"></div>
+        </div>
+        <div class="meter-detail">{{ .Detail }}</div>
+      </div>
+      {{ end }}
+    </div>
   </article>
 
-  <article class="panel">
-    <div class="section-title">Recent warning events</div>
+  <article class="panel hub-anomalies-panel">
+    <div class="security-panel-head">
+      <div class="security-panel-title">
+        <span class="material-symbols-outlined">bolt</span>
+        <span>What Changed</span>
+      </div>
+      <a class="button button-secondary" href="/anomalies">View All</a>
+    </div>
+
+    {{ if .Hub.Signals }}
+    <div class="hub-signal-list">
+      {{ range .Hub.Signals }}
+      <div class="hub-signal-row tone-{{ .Severity }}">
+        <div class="hub-signal-icon">
+          <span class="material-symbols-outlined">{{ anomalyIcon .Severity }}</span>
+        </div>
+        <div class="hub-signal-copy">
+          <div class="hub-signal-head">
+            <div class="row-title">{{ .Signal }}</div>
+            <div class="row-meta">{{ .Window }}</div>
+          </div>
+          <div class="signal-resource">{{ .Resource }}</div>
+          <div class="hub-signal-foot">
+            <span class="tiny-chip tone-{{ .Severity }}">{{ .Value }}</span>
+            <span class="row-detail">{{ .Details }}</span>
+          </div>
+        </div>
+      </div>
+      {{ end }}
+    </div>
+    {{ else }}
+    <div class="empty">No active anomaly rules are currently firing.</div>
+    {{ end }}
+  </article>
+</section>
+
+<section class="hub-secondary">
+  <article class="panel hub-events-panel">
+    <div class="security-panel-head">
+      <div class="security-panel-title">
+        <span class="material-symbols-outlined">event</span>
+        <span>Latest Warning Events</span>
+      </div>
+      <a class="button button-secondary" href="/anomalies">Investigate</a>
+    </div>
+
     {{ if .Hub.WarningEvents }}
     <div class="table">
       {{ range .Hub.WarningEvents }}
@@ -54,35 +109,28 @@
     <div class="empty">No warning events available from the Kubernetes API.</div>
     {{ end }}
   </article>
-</section>
 
-<section class="two-column">
-  <article class="panel">
-    <div class="section-title">Top CPU nodes</div>
-    <div class="table">
-      {{ range .Hub.TopCPU }}
-      <div class="table-row">
-        <div>
-          <div class="row-title">{{ .Name }}</div>
-          <div class="row-detail">{{ .Detail }}</div>
-        </div>
-        <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
+  <article class="panel hub-paths-panel">
+    <div class="security-panel-head">
+      <div class="security-panel-title">
+        <span class="material-symbols-outlined">open_in_new</span>
+        <span>Investigation Paths</span>
       </div>
-      {{ end }}
     </div>
-  </article>
 
-  <article class="panel">
-    <div class="section-title">Top memory nodes</div>
-    <div class="table">
-      {{ range .Hub.TopMemory }}
-      <div class="table-row">
-        <div>
-          <div class="row-title">{{ .Name }}</div>
-          <div class="row-detail">{{ .Detail }}</div>
+    <div class="hub-path-grid">
+      {{ range .Hub.Paths }}
+      <a class="hub-path-card tone-{{ .Tone }}" href="{{ .Path }}">
+        <div class="hub-path-head">
+          <div class="hub-path-title">
+            <span class="material-symbols-outlined">{{ .Icon }}</span>
+            <span>{{ .Label }}</span>
+          </div>
+          <span class="material-symbols-outlined">arrow_forward</span>
         </div>
-        <div class="pill tone-{{ .Tone }}">{{ .Value }}</div>
-      </div>
+        <div class="hub-path-value">{{ .Value }}</div>
+        <div class="hub-path-detail">{{ .Detail }}</div>
+      </a>
       {{ end }}
     </div>
   </article>

@@ -29,6 +29,16 @@ rules:
       - gitrepositories
       - ocirepositories
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["volsync.backube"]
+    resources:
+      - replicationsources
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["external-secrets.io"]
+    resources:
+      - externalsecrets
+      - secretstores
+      - clustersecretstores
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

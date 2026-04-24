@@ -38,20 +38,8 @@
 
       <main class="main">
         <header class="topbar">
-          <div class="topbar-search">
-            <span class="material-symbols-outlined">search</span>
-            <span class="topbar-search-text">Search logs, metrics, alerts...</span>
-          </div>
+          <div class="topbar-cluster">{{ .ClusterName }}</div>
           <div class="topbar-tools">
-            <button class="icon-button" aria-label="Cluster" type="button">
-              <span class="material-symbols-outlined">dns</span>
-            </button>
-            <button class="icon-button" aria-label="Notifications" type="button">
-              <span class="material-symbols-outlined">notifications_active</span>
-            </button>
-            <button class="icon-button" aria-label="Settings" type="button">
-              <span class="material-symbols-outlined">settings</span>
-            </button>
             <button class="button button-secondary topbar-refresh" id="refresh-view" type="button">Refresh</button>
             <div class="topbar-meta" id="page-topbar-meta">
               {{ template "topbar_meta" . }}
@@ -73,7 +61,36 @@
         const refreshButton = document.getElementById("refresh-view");
         const header = document.getElementById("page-topbar-meta");
         const pageBody = document.getElementById("page-body");
+        let refreshTimer = null;
+        let nextRefreshAt = Date.now() + (refreshSeconds * 1000);
         let refreshInFlight = false;
+
+        function updateRefreshCountdown() {
+          const refreshCountdown = document.getElementById("refresh-countdown");
+          if (!refreshCountdown) {
+            return;
+          }
+
+          if (refreshInFlight) {
+            refreshCountdown.textContent = "Refreshing…";
+            return;
+          }
+
+          const remainingMs = Math.max(0, nextRefreshAt - Date.now());
+          const remainingSeconds = Math.ceil(remainingMs / 1000);
+          refreshCountdown.textContent = `Next refresh in ${remainingSeconds}s`;
+        }
+
+        function scheduleNextRefresh() {
+          if (refreshTimer) {
+            window.clearTimeout(refreshTimer);
+          }
+          nextRefreshAt = Date.now() + (refreshSeconds * 1000);
+          updateRefreshCountdown();
+          refreshTimer = window.setTimeout(function () {
+            refreshView(false);
+          }, refreshSeconds * 1000);
+        }
 
         async function refreshView(manual) {
           if (refreshInFlight) {
@@ -81,9 +98,10 @@
           }
 
           refreshInFlight = true;
+          updateRefreshCountdown();
           if (manual && refreshButton) {
             refreshButton.disabled = true;
-            refreshButton.textContent = "Refreshing...";
+            refreshButton.textContent = "Refreshing…";
           }
 
           try {
@@ -101,10 +119,12 @@
             console.error(error);
           } finally {
             refreshInFlight = false;
+            scheduleNextRefresh();
             if (refreshButton) {
               refreshButton.disabled = false;
               refreshButton.textContent = "Refresh";
             }
+            updateRefreshCountdown();
           }
         }
 
@@ -114,9 +134,8 @@
           });
         }
 
-        window.setInterval(function () {
-          refreshView(false);
-        }, refreshSeconds * 1000);
+        window.setInterval(updateRefreshCountdown, 1000);
+        scheduleNextRefresh();
       }());
     </script>
   </body>
@@ -124,31 +143,18 @@
 {{ end }}
 
 {{ define "topbar_meta" }}
-<div class="chip tone-{{ .Banner.Tone }}">
-  <span class="dot"></span>
-  <span>{{ .Banner.Label }}</span>
-</div>
-<div class="generated-at">Updated {{ ago .GeneratedAt }}</div>
+<div class="generated-at" id="refresh-countdown">Next refresh in {{ .RefreshSeconds }}s</div>
 {{ end }}
 
 {{ define "page_common" }}
 <section class="page-header">
   <div class="page-header-copy">
-    <div class="eyebrow">{{ .ClusterName }}</div>
     <h1 class="page-title">{{ .PageTitle }}</h1>
-    <p class="page-subtitle">{{ .Banner.Detail }}</p>
   </div>
   <div class="page-header-actions">
     {{ range $index, $action := .Banner.Actions }}
     <a class="button {{ if eq $index 0 }}button-secondary{{ end }}" href="{{ $action.Path }}">{{ $action.Label }}</a>
     {{ end }}
-  </div>
-</section>
-
-<section class="banner tone-{{ .Banner.Tone }}">
-  <div>
-    <div class="banner-label">{{ .Banner.Label }}</div>
-    <p class="banner-detail">{{ .Banner.Detail }}</p>
   </div>
 </section>
 

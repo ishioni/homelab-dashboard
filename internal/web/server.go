@@ -51,6 +51,12 @@ func NewServer(cfg config.Config, service dashboardService) *Server {
 			}
 			return diff.String() + " ago"
 		},
+		"ts": func(value time.Time) string {
+			if value.IsZero() {
+				return ""
+			}
+			return value.UTC().Format(time.RFC3339)
+		},
 		"meterWidth": func(value float64) string {
 			if value < 0 {
 				value = 0
